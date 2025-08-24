@@ -171,31 +171,22 @@ async function handleTestShopify() {
     showConfigMessage('Shopify bağlantısı test ediliyor...', 'info');
     
     try {
-        // Geçici config oluştur
-        const originalConfig = {
-            storeUrl: window.appConfig.shopifyStoreUrl,
-            token: window.appConfig.shopifyToken
-        };
-        
-        // Test için geçici ayarla
-        window.appConfig.shopifyStoreUrl = shopifyStoreUrl;
-        window.appConfig.shopifyToken = shopifyToken;
+        // Geçici config kaydet
+        localStorage.setItem('temp_shopify_config', JSON.stringify({
+            shopifyUrl: shopifyStoreUrl,
+            shopifyToken: shopifyToken
+        }));
         
         const result = await window.shopifyService.checkConnection();
         
-        // Orjinal ayarları geri yükle
-        window.appConfig.shopifyStoreUrl = originalConfig.storeUrl;
-        window.appConfig.shopifyToken = originalConfig.token;
-        
-        if (result.success) {
-            showConfigMessage('✅ Shopify bağlantısı başarılı!', 'success');
+        if (result) {
+            showConfigMessage(`✅ Shopify bağlantısı başarılı! Mağaza: ${result.name}`, 'success');
+            console.log('Shop info:', result);
         } else {
-            showConfigMessage('❌ Shopify bağlantı hatası: ' + result.message, 'error');
+            showConfigMessage('❌ Shopify bağlantı hatası: Shop bilgisi alınamadı', 'error');
         }
     } catch (error) {
-        // Orjinal ayarları geri yükle
-        window.appConfig.shopifyStoreUrl = originalConfig.storeUrl;
-        window.appConfig.shopifyToken = originalConfig.token;
+        console.error('Shopify test error:', error);
         showConfigMessage('❌ Shopify bağlantı hatası: ' + error.message, 'error');
     }
 }
@@ -211,25 +202,29 @@ async function handleTestXML() {
     showConfigMessage('XML bağlantısı test ediliyor...', 'info');
     
     try {
-        // Geçici config oluştur
-        const originalUrl = window.appConfig.xmlFeedUrl;
+        // Geçici config kaydet
+        window.configService.setConfig({
+            xmlUrl: xmlFeedUrl
+        });
         
-        // Test için geçici ayarla
-        window.appConfig.xmlFeedUrl = xmlFeedUrl;
+        const xmlData = await window.xmlService.fetchXMLData();
         
-        const result = await window.xmlService.checkConnection();
-        
-        // Orjinal ayarları geri yükle
-        window.appConfig.xmlFeedUrl = originalUrl;
-        
-        if (result.success) {
-            showConfigMessage('✅ XML bağlantısı başarılı!', 'success');
+        if (xmlData && xmlData.length > 0) {
+            showConfigMessage(`✅ XML bağlantısı başarılı! Data uzunluğu: ${xmlData.length} karakter`, 'success');
+            
+            // Parse test
+            try {
+                const products = await window.xmlService.parseXMLToProducts(xmlData);
+                console.log('Parsed products:', products.slice(0, 3)); // İlk 3 ürünü göster
+                showConfigMessage(`✅ XML parse başarılı! ${products.length} ürün bulundu`, 'success');
+            } catch (parseError) {
+                showConfigMessage(`⚠️ XML alındı ancak parse hatası: ${parseError.message}`, 'warning');
+            }
         } else {
-            showConfigMessage('❌ XML bağlantı hatası: ' + result.message, 'error');
+            showConfigMessage('❌ XML bağlantı hatası: Boş veri', 'error');
         }
     } catch (error) {
-        // Orjinal ayarları geri yükle
-        window.appConfig.xmlFeedUrl = originalUrl;
+        console.error('XML test error:', error);
         showConfigMessage('❌ XML bağlantı hatası: ' + error.message, 'error');
     }
 }
@@ -247,6 +242,11 @@ function showConfigMessage(message, type) {
             statusDiv.style.backgroundColor = '#d4edda';
             statusDiv.style.color = '#155724';
             statusDiv.style.borderColor = '#c3e6cb';
+            break;
+        case 'warning':
+            statusDiv.style.backgroundColor = '#fff3cd';
+            statusDiv.style.color = '#856404';
+            statusDiv.style.borderColor = '#ffeaa7';
             break;
         case 'error':
             statusDiv.style.backgroundColor = '#f8d7da';
