@@ -196,21 +196,28 @@ async function updateDashboard() {
     const shopifyEmail = document.getElementById('shopify-email');
     const shopifyProducts = document.getElementById('shopify-products');
 
-    if (config.shopifyUrl && config.shopifyToken) {
+    if (config.shopifyUrl && (config.shopifyAdminToken || config.shopifyStorefrontToken)) {
         try {
+            console.log('Shopify bağlantısı kontrol ediliyor...');
             const shopData = await window.shopifyService.checkConnection();
+            console.log('Shopify shop data:', shopData);
+            
             if (shopData) {
                 shopifyStatus.textContent = 'Bağlandı';
                 shopifyStatus.className = 'status-badge success';
-                shopifyName.textContent = shopData.name;
-                shopifyEmail.textContent = shopData.email;
+                shopifyName.textContent = shopData.name || 'N/A';
+                shopifyEmail.textContent = shopData.email || 'N/A';
+                
                 // Get product count
+                console.log('Shopify ürünleri getiriliyor...');
                 const products = await window.shopifyService.getAllProducts();
+                console.log('Shopify products:', products);
                 shopifyProducts.textContent = products.length;
             } else {
                  throw new Error('Shopify\'e bağlanılamadı.');
             }
         } catch (e) {
+            console.error('Shopify dashboard hatası:', e);
             shopifyStatus.textContent = 'Hata';
             shopifyStatus.className = 'status-badge error';
             shopifyName.textContent = 'N/A';
@@ -231,12 +238,15 @@ async function updateDashboard() {
     if (config.xmlUrl) {
         xmlSourceUrl.textContent = config.xmlUrl;
         try {
+            console.log('XML stats alınıyor...');
             const stats = await window.xmlService.getXMLStats();
+            console.log('XML stats:', stats);
             xmlStatus.textContent = 'Bağlandı';
             xmlStatus.className = 'status-badge success';
-            xmlProducts.textContent = stats.productCount;
-            xmlVariants.textContent = stats.variantCount;
+            xmlProducts.textContent = stats.productCount || 0;
+            xmlVariants.textContent = stats.variantCount || 0;
         } catch (e) {
+            console.error('XML dashboard hatası:', e);
             xmlStatus.textContent = 'Hata';
             xmlStatus.className = 'status-badge error';
             xmlProducts.textContent = 'N/A';
