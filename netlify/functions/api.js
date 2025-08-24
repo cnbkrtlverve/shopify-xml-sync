@@ -190,8 +190,23 @@ async function handleShopify(action, event, headers) {
       };
     }
 
+    // URL formatını düzelt
+    let shopUrl = SHOPIFY_STORE_URL;
+    if (!shopUrl.includes('.myshopify.com')) {
+      shopUrl = shopUrl.replace('https://', '').replace('http://', '');
+      shopUrl = `https://${shopUrl}.myshopify.com`;
+    }
+    if (!shopUrl.startsWith('https://')) {
+      shopUrl = `https://${shopUrl}`;
+    }
+
+    console.log('Shopify URL formatı:', {
+      original: SHOPIFY_STORE_URL,
+      formatted: shopUrl
+    });
+
     const shopifyApi = axios.create({
-      baseURL: `https://${SHOPIFY_STORE_URL}/admin/api/2024-07`,
+      baseURL: `${shopUrl}/admin/api/2024-07`,
       headers: { 
         'X-Shopify-Access-Token': SHOPIFY_ADMIN_API_TOKEN,
         'Content-Type': 'application/json'
@@ -242,16 +257,20 @@ async function handleShopify(action, event, headers) {
 
     if (action === 'info') {
       try {
-        console.log('Shopify info starting');
+        console.log('Shopify info starting - URL:', SHOPIFY_STORE_URL);
         
         const [shopResponse, countResponse] = await Promise.all([
           shopifyApi.get('/shop.json'),
           shopifyApi.get('/products/count.json')
         ]);
         
-        console.log('Shopify info successful');
+        console.log('Shopify info responses received:', {
+          shopStatus: shopResponse.status,
+          countStatus: countResponse.status,
+          shopName: shopResponse.data?.shop?.name
+        });
         
-        return {
+        const result = {
           statusCode: 200,
           headers,
           body: JSON.stringify({
@@ -265,6 +284,9 @@ async function handleShopify(action, event, headers) {
             }
           })
         };
+        
+        console.log('Shopify info final result:', result);
+        return result;
       } catch (error) {
         console.error('Shopify info error:', {
           message: error.message,

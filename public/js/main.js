@@ -254,21 +254,40 @@ async function updateDashboard() {
     if (config.shopifyAdminToken) apiHeaders['X-Shopify-Admin-Token'] = config.shopifyAdminToken;
     if (config.xmlUrl) apiHeaders['X-XML-Feed-Url'] = config.xmlUrl;
 
+    console.log('Dashboard API çağrısı yapılıyor:', {
+        url: '/api/shopify/info',
+        headers: {
+            hasShopifyUrl: !!apiHeaders['X-Shopify-Store-Url'],
+            hasShopifyToken: !!apiHeaders['X-Shopify-Admin-Token'],
+            shopifyUrl: apiHeaders['X-Shopify-Store-Url']?.substring(0, 20) + '...'
+        }
+    });
+
     fetch('/api/shopify/info', {
         headers: apiHeaders
     })
         .then(res => {
+            console.log('Dashboard API yanıtı alındı:', {
+                status: res.status,
+                statusText: res.statusText,
+                headers: Object.fromEntries(res.headers.entries())
+            });
+            
             if (!res.ok) {
                 throw new Error(`HTTP ${res.status}: ${res.statusText}`);
             }
             return res.text(); // Önce text olarak al
         })
         .then(text => {
+            console.log('Dashboard raw response:', text);
+            
             if (!text || text.trim() === '') {
                 throw new Error('Boş yanıt alındı');
             }
             try {
                 const data = JSON.parse(text);
+                console.log('Dashboard parsed data:', data);
+                
                 if (data.success) {
                     shopifyStatus.textContent = 'Bağlandı';
                     shopifyStatus.className = 'status-badge success';
@@ -280,7 +299,7 @@ async function updateDashboard() {
                 }
             } catch (jsonError) {
                 console.error('JSON Parse Error:', jsonError);
-                console.log('Raw response:', text);
+                console.log('Raw response for debug:', text);
                 throw new Error('Geçersiz JSON yanıtı alındı');
             }
         })
