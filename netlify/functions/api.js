@@ -101,17 +101,65 @@ exports.handler = async (event, context) => {
 
     // Shopify info endpoint
     if (path.includes('/shopify/info')) {
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          success: true,
-          connected: true,
-          store: 'Test Store',
-          email: 'test@example.com',
-          productCount: 0
-        })
-      };
+      // Netlify Functions'ta header'lar event.headers'da gelir (lowercase)
+      const requestHeaders = event.headers || {};
+      const shopUrl = requestHeaders['x-shopify-shop-url'] || requestHeaders['X-Shopify-Shop-Url'];
+      const accessToken = requestHeaders['x-shopify-access-token'] || requestHeaders['X-Shopify-Access-Token'];
+      
+      if (!shopUrl || !accessToken) {
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            connected: false,
+            store: 'Shopify bilgileri eksik',
+            email: 'Lütfen config sayfasından Shopify bilgilerini girin',
+            productCount: 0
+          })
+        };
+      }
+      
+      try {
+        // Shopify Admin API'ye gerçek çağrı
+        const shopifyResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/shop.json`, {
+          headers: {
+            'X-Shopify-Access-Token': accessToken,
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        });
+        
+        const shopData = shopifyResponse.data.shop;
+        
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            success: true,
+            connected: true,
+            store: shopData.name,
+            email: shopData.email,
+            domain: shopData.domain,
+            productCount: 0, // Bu ayrı API çağrısıyla alınabilir
+            currency: shopData.currency,
+            timezone: shopData.timezone
+          })
+        };
+        
+      } catch (error) {
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            connected: false,
+            store: 'Bağlantı hatası',
+            email: error.response?.data?.errors || error.message,
+            productCount: 0
+          })
+        };
+      }
     }
 
     // XML analyze endpoint
