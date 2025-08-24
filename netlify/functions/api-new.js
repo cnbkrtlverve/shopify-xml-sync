@@ -158,50 +158,6 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Config endpoint
-    if (path.includes('/config')) {
-      if (method === 'POST') {
-        // Config kaydetme
-        try {
-          const body = JSON.parse(event.body || '{}');
-          console.log('Config kaydediliyor:', Object.keys(body));
-          
-          // Config'i memory'de saklayalım (gerçek uygulamada database kullanılır)
-          global.appConfig = global.appConfig || {};
-          global.appConfig = { ...global.appConfig, ...body };
-          
-          return {
-            statusCode: 200,
-            headers,
-            body: JSON.stringify({
-              success: true,
-              message: 'Konfigürasyon başarıyla kaydedildi',
-              saved: Object.keys(body)
-            })
-          };
-        } catch (error) {
-          return {
-            statusCode: 400,
-            headers,
-            body: JSON.stringify({
-              success: false,
-              message: 'Config kaydetme hatası: ' + error.message
-            })
-          };
-        }
-      } else if (method === 'GET') {
-        // Config okuma
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({
-            success: true,
-            config: global.appConfig || {}
-          })
-        };
-      }
-    }
-
     // Sync summary endpoint
     if (path.includes('/sync/summary')) {
       return {
@@ -353,28 +309,14 @@ exports.handler = async (event, context) => {
       const body = JSON.parse(event.body || '{}');
       const options = body.options || {};
       
-      // Config kontrolü - önce header'lara bak, sonra global config'e, sonra env'e
-      const config = global.appConfig || {};
-      const SHOPIFY_STORE_URL = event.headers['x-shopify-store-url'] || 
-                               event.headers['X-Shopify-Store-Url'] ||
-                               config.shopifyUrl || 
-                               process.env.SHOPIFY_STORE_URL;
-      const SHOPIFY_ADMIN_API_TOKEN = event.headers['x-shopify-admin-token'] || 
-                                     event.headers['X-Shopify-Admin-Token'] ||
-                                     config.shopifyAdminToken ||
-                                     process.env.SHOPIFY_ADMIN_API_TOKEN;
-      const XML_FEED_URL = event.headers['x-xml-feed-url'] ||
-                          event.headers['X-XML-Feed-Url'] ||
-                          config.xmlUrl || 
-                          'https://stildiva.sentos.com.tr/xml-sentos-out/1';
-
-      console.log('Config kaynaklarından:', {
-        hasHeaderStoreUrl: !!(event.headers['x-shopify-store-url'] || event.headers['X-Shopify-Store-Url']),
-        hasHeaderToken: !!(event.headers['x-shopify-admin-token'] || event.headers['X-Shopify-Admin-Token']),
-        hasGlobalConfig: !!(config.shopifyUrl && config.shopifyAdminToken),
-        finalStoreUrl: SHOPIFY_STORE_URL ? 'VAR' : 'YOK',
-        finalToken: SHOPIFY_ADMIN_API_TOKEN ? 'VAR' : 'YOK'
-      });
+      // Config kontrolü
+      const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || 
+                               event.headers['x-shopify-store-url'] || 
+                               event.headers['X-Shopify-Store-Url'];
+      const SHOPIFY_ADMIN_API_TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN || 
+                                     event.headers['x-shopify-admin-token'] || 
+                                     event.headers['X-Shopify-Admin-Token'];
+      const XML_FEED_URL = 'https://stildiva.sentos.com.tr/xml-sentos-out/1';
 
       if (!SHOPIFY_STORE_URL || !SHOPIFY_ADMIN_API_TOKEN) {
         return {
@@ -385,14 +327,7 @@ exports.handler = async (event, context) => {
             message: 'Shopify konfigürasyonu eksik',
             debug: {
               hasStoreUrl: !!SHOPIFY_STORE_URL,
-              hasToken: !!SHOPIFY_ADMIN_API_TOKEN,
-              storeUrlSource: SHOPIFY_STORE_URL ? (event.headers['x-shopify-store-url'] || event.headers['X-Shopify-Store-Url'] ? 'header' : config.shopifyUrl ? 'config' : 'env') : 'none',
-              tokenSource: SHOPIFY_ADMIN_API_TOKEN ? (event.headers['x-shopify-admin-token'] || event.headers['X-Shopify-Admin-Token'] ? 'header' : config.shopifyAdminToken ? 'config' : 'env') : 'none',
-              configSource: {
-                fromGlobalConfig: !!(config.shopifyUrl && config.shopifyAdminToken),
-                fromHeaders: !!(event.headers['x-shopify-store-url'] || event.headers['X-Shopify-Store-Url']) && !!(event.headers['x-shopify-admin-token'] || event.headers['X-Shopify-Admin-Token']),
-                fromEnv: !!(process.env.SHOPIFY_STORE_URL && process.env.SHOPIFY_ADMIN_API_TOKEN)
-              }
+              hasToken: !!SHOPIFY_ADMIN_API_TOKEN
             }
           })
         };
