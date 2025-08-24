@@ -33,12 +33,24 @@ exports.handler = async (event, context) => {
 
     // Shopify check endpoint  
     if (path.includes('/shopify/check')) {
-      console.log('Headers received:', JSON.stringify(headers, null, 2));
+      console.log('All headers received:', JSON.stringify(headers, null, 2));
+      console.log('Request event details:', {
+        httpMethod: event.httpMethod,
+        path: event.path,
+        queryStringParameters: event.queryStringParameters
+      });
       
-      const shopUrl = headers['x-shopify-shop-url'] || headers['X-Shopify-Shop-Url'];
-      const accessToken = headers['x-shopify-access-token'] || headers['X-Shopify-Access-Token'];
+      // Netlify Functions'ta header'lar lowercase olur
+      const shopUrl = headers['x-shopify-shop-url'] || headers['X-Shopify-Shop-Url'] || 
+                      event.headers && (event.headers['x-shopify-shop-url'] || event.headers['X-Shopify-Shop-Url']);
+      const accessToken = headers['x-shopify-access-token'] || headers['X-Shopify-Access-Token'] ||
+                          event.headers && (event.headers['x-shopify-access-token'] || event.headers['X-Shopify-Access-Token']);
       
-      console.log('Parsed values:', { shopUrl, accessToken: accessToken ? 'PRESENT' : 'MISSING' });
+      console.log('Parsed values:', { 
+        shopUrl, 
+        accessToken: accessToken ? 'PRESENT' : 'MISSING',
+        eventHeaders: event.headers ? Object.keys(event.headers) : 'NO EVENT HEADERS'
+      });
       
       if (!shopUrl || !accessToken) {
         return {
@@ -50,8 +62,11 @@ exports.handler = async (event, context) => {
             message: 'Shopify bilgileri eksik. Store URL ve Access Token gerekli.',
             debug: {
               receivedHeaders: Object.keys(headers),
+              eventHeaders: event.headers ? Object.keys(event.headers) : null,
               shopUrlFound: !!shopUrl,
-              tokenFound: !!accessToken
+              tokenFound: !!accessToken,
+              shopUrl: shopUrl || 'NOT_FOUND',
+              hasEventHeaders: !!event.headers
             }
           })
         };
