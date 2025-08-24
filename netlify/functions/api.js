@@ -576,8 +576,8 @@ exports.handler = async (event, context) => {
           };
         }
         
-        // İlk 10 ürünü işle (optimize edilmiş)
-        const productsToProcess = products.slice(0, 10);
+        // İlk 20 ürünü işle (test için)
+        const productsToProcess = products.slice(0, 20);
         console.log(`${productsToProcess.length} ürün işlenecek`);
         
         let createdCount = 0;
@@ -585,145 +585,233 @@ exports.handler = async (event, context) => {
         let errorCount = 0;
         const processedProducts = [];
         
-        for (let i = 0; i < productsToProcess.length; i++) {
-          const product = productsToProcess[i];
+        // Batch işleme (50'li gruplar halinde)
+        const batchSize = 50;
+        const totalBatches = Math.ceil(productsToProcess.length / batchSize);
+        
+        for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+          const batchStart = batchIndex * batchSize;
+          const batchEnd = Math.min(batchStart + batchSize, productsToProcess.length);
+          const batchProducts = productsToProcess.slice(batchStart, batchEnd);
           
-          try {
-            // Fiyatı düzelt (Türkçe format: "0,00" -> "0.00")
-            let price = '10.00'; // default
-            if (product.satis_fiyati) {
-              const cleanPrice = String(product.satis_fiyati).replace(',', '.');
-              const numPrice = parseFloat(cleanPrice);
-              if (numPrice > 0) {
-                price = numPrice.toFixed(2);
-              }
-            }
+          console.log(`Batch ${batchIndex + 1}/${totalBatches}: ${batchProducts.length} ürün işleniyor`);
+          
+          for (let i = 0; i < batchProducts.length; i++) {
+            const product = batchProducts[i];
             
-            // Stok kontrolü
-            const stock = parseInt(product.stok) || 0;
-            
-            // Ürün başlığını temizle
-            const title = product.urunismi ? String(product.urunismi).trim() : `Ürün ${i+1}`;
-            
-            // Shopify ürün objesi
-            const shopifyProduct = {
-              title: title,
-              body_html: product.aciklama || 'XML\'den aktarılan ürün',
-              product_type: product.kategori_ismi || 'XML Import',
-              vendor: 'Sentos',
-              status: 'draft',
-              variants: [{
-                price: price,
-                inventory_quantity: stock,
-                weight: 0,
-                requires_shipping: true,
-                sku: product.stok_kodu || `XML-${i+1}`
-              }]
-            };
-            
-            // Shopify'da aynı başlıkta ürün var mı kontrol et
-            let existingProduct = null;
             try {
-              const searchResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/products.json?title=${encodeURIComponent(title)}&limit=1`, {
-                headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
-                timeout: 5000
-              });
-              
-              if (searchResponse.data.products && searchResponse.data.products.length > 0) {
-                existingProduct = searchResponse.data.products[0];
+              // Fiyatı düzelt (Türkçe format: "0,00" -> "0.00")
+              let price = '10.00'; // default
+              if (product.satis_fiyati) {
+                const cleanPrice = String(product.satis_fiyati).replace(',', '.');
+                const numPrice = parseFloat(cleanPrice);
+                if (numPrice > 0) {
+                  price = numPrice.toFixed(2);
+                }
               }
-            } catch (searchError) {
-              console.log(`Ürün arama hatası: ${title}`, searchError.message);
-            }
-            
-            if (existingProduct) {
-              // GÜNCELLEME: Mevcut ürünü güncelle
+              
+              // Stok kontrolü
+              const stock = parseInt(product.stok) || 0;
+              
+              // Ürün başlığını temizle
+              const title = product.urunismi ? String(product.urunismi).trim() : `Ürün ${batchStart + i + 1}`;
+              
+              // Kategori bilgisi
+              const productType = product.kategori_ismi ? String(product.kategori_ismi).split(' > ').pop() : 'XML Import';
+              
+              // Açıklama oluştur
+              let description = '';
+              if (product.aciklama && product.aciklama.trim()) {
+                description = String(product.aciklama).trim();
+              } else if (product.alt_baslik && product.alt_baslik.trim()) {
+                description = String(product.alt_baslik).trim();
+              } else {
+                // Ürün bilgilerinden açıklama oluştur
+                const details = [];
+                if (product.kategori_ismi) details.push(`Kategori: ${product.kategori_ismi}`);
+                if (product.stok_kodu) details.push(`Ürün Kodu: ${product.stok_kodu}`);
+                if (product.marka && product.marka.trim()) details.push(`Marka: ${product.marka}`);
+                description = details.join('\n') || 'Kaliteli ürün';
+              }
+              
+              // Shopify ürün objesi (daha detaylı)
+              const shopifyProduct = {
+                title: title,
+                body_html: `<p>${description.replace(/\n/g, '<br>')}</p>`,
+                product_type: productType,
+                vendor: product.marka && product.marka.trim() ? String(product.marka).trim() : 'Sentos',
+                status: 'draft',
+                tags: [
+                  'XML Import',
+                  product.kategori_ismi ? product.kategori_ismi.split(' > ').slice(-2).join(', ') : '',
+                  product.stok_kodu ? `SKU-${product.stok_kodu}` : ''
+                ].filter(Boolean).join(', '),
+                variants: [{
+                  price: price,
+                  inventory_quantity: stock,
+                  weight: product.agirlik ? parseFloat(String(product.agirlik).replace(',', '.')) || 0 : 0,
+                  requires_shipping: true,
+                  sku: product.stok_kodu || `XML-${product.id}`,
+                  barcode: product.barkod || '',
+                  inventory_management: 'shopify',
+                  inventory_policy: 'deny'
+                }],
+                images: []
+              };
+              
+              // Resim URL'leri ekle (varsa)
+              if (product.resim_url_1 && product.resim_url_1.trim()) {
+                shopifyProduct.images.push({ src: product.resim_url_1.trim() });
+              }
+              if (product.resim_url_2 && product.resim_url_2.trim()) {
+                shopifyProduct.images.push({ src: product.resim_url_2.trim() });
+              }
+              if (product.resim_url_3 && product.resim_url_3.trim()) {
+                shopifyProduct.images.push({ src: product.resim_url_3.trim() });
+              }
+              
+              // Shopify'da aynı SKU ile ürün var mı kontrol et
+              let existingProduct = null;
               try {
-                const updateData = {
-                  id: existingProduct.id,
-                  body_html: shopifyProduct.body_html,
-                  product_type: shopifyProduct.product_type,
-                  variants: [{
-                    id: existingProduct.variants[0].id,
+                const searchResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/products.json?fields=id,title,variants&limit=1`, {
+                  headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
+                  timeout: 5000,
+                  params: {
+                    'variants.sku': product.stok_kodu || `XML-${product.id}`
+                  }
+                });
+                
+                if (searchResponse.data.products && searchResponse.data.products.length > 0) {
+                  existingProduct = searchResponse.data.products[0];
+                }
+              } catch (searchError) {
+                // SKU ile bulunamadı, title ile dene
+                try {
+                  const titleSearchResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/products.json?title=${encodeURIComponent(title)}&fields=id,title,variants&limit=1`, {
+                    headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
+                    timeout: 5000
+                  });
+                  
+                  if (titleSearchResponse.data.products && titleSearchResponse.data.products.length > 0) {
+                    existingProduct = titleSearchResponse.data.products[0];
+                  }
+                } catch (titleSearchError) {
+                  console.log(`Ürün arama hatası: ${title}`, titleSearchError.message);
+                }
+              }
+              
+              if (existingProduct) {
+                // GÜNCELLEME: Mevcut ürünü güncelle
+                try {
+                  const updateData = {
+                    id: existingProduct.id,
+                    body_html: shopifyProduct.body_html,
+                    product_type: shopifyProduct.product_type,
+                    vendor: shopifyProduct.vendor,
+                    tags: shopifyProduct.tags,
+                    variants: [{
+                      id: existingProduct.variants[0].id,
+                      price: price,
+                      inventory_quantity: stock,
+                      sku: product.stok_kodu || existingProduct.variants[0].sku,
+                      barcode: product.barkod || existingProduct.variants[0].barcode,
+                      weight: shopifyProduct.variants[0].weight
+                    }]
+                  };
+                  
+                  await axios.put(`https://${shopUrl}/admin/api/2024-07/products/${existingProduct.id}.json`, {
+                    product: updateData
+                  }, {
+                    headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
+                    timeout: 10000
+                  });
+                  
+                  updatedCount++;
+                  processedProducts.push({
+                    title: title,
+                    action: 'updated',
+                    productId: existingProduct.id,
                     price: price,
-                    inventory_quantity: stock,
-                    sku: product.stok_kodu || existingProduct.variants[0].sku
-                  }]
-                };
+                    stock: stock,
+                    sku: product.stok_kodu
+                  });
+                  
+                  console.log(`Ürün güncellendi: ${title}`);
+                  
+                } catch (updateError) {
+                  console.error(`Güncelleme hatası: ${title}`, updateError.message);
+                  errorCount++;
+                }
                 
-                await axios.put(`https://${shopUrl}/admin/api/2024-07/products/${existingProduct.id}.json`, {
-                  product: updateData
-                }, {
-                  headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
-                  timeout: 10000
-                });
-                
-                updatedCount++;
-                processedProducts.push({
-                  title: title,
-                  action: 'updated',
-                  productId: existingProduct.id,
-                  price: price,
-                  stock: stock
-                });
-                
-                console.log(`Ürün güncellendi: ${title}`);
-                
-              } catch (updateError) {
-                console.error(`Güncelleme hatası: ${title}`, updateError.message);
-                errorCount++;
+              } else {
+                // OLUŞTURMA: Yeni ürün oluştur
+                try {
+                  const createResponse = await axios.post(`https://${shopUrl}/admin/api/2024-07/products.json`, {
+                    product: shopifyProduct
+                  }, {
+                    headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
+                    timeout: 10000
+                  });
+                  
+                  createdCount++;
+                  processedProducts.push({
+                    title: title,
+                    action: 'created',
+                    productId: createResponse.data.product.id,
+                    price: price,
+                    stock: stock,
+                    sku: product.stok_kodu
+                  });
+                  
+                  console.log(`Yeni ürün oluşturuldu: ${title}`);
+                  
+                } catch (createError) {
+                  console.error(`Oluşturma hatası: ${title}`, createError.message);
+                  errorCount++;
+                }
               }
               
-            } else {
-              // OLUŞTURMA: Yeni ürün oluştur
-              try {
-                const createResponse = await axios.post(`https://${shopUrl}/admin/api/2024-07/products.json`, {
-                  product: shopifyProduct
-                }, {
-                  headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
-                  timeout: 10000
-                });
-                
-                createdCount++;
-                processedProducts.push({
-                  title: title,
-                  action: 'created',
-                  productId: createResponse.data.product.id,
-                  price: price,
-                  stock: stock
-                });
-                
-                console.log(`Yeni ürün oluşturuldu: ${title}`);
-                
-              } catch (createError) {
-                console.error(`Oluşturma hatası: ${title}`, createError.message);
-                errorCount++;
+              // Rate limiting (Shopify API limits)
+              if ((batchStart + i + 1) % 10 === 0) {
+                await new Promise(resolve => setTimeout(resolve, 500)); // Her 10 üründe 500ms bekle
+              } else {
+                await new Promise(resolve => setTimeout(resolve, 50)); // Normal bekleme
               }
+              
+            } catch (productError) {
+              console.error(`Ürün işleme hatası: ${product.urunismi}`, productError.message);
+              errorCount++;
             }
-            
-            // Rate limiting için küçük bekleme
-            if (i < productsToProcess.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 50));
-            }
-            
-          } catch (productError) {
-            console.error(`Ürün işleme hatası: ${product.urunismi}`, productError.message);
-            errorCount++;
+          }
+          
+          // Batch arası bekleme
+          if (batchIndex < totalBatches - 1) {
+            console.log(`Batch ${batchIndex + 1} tamamlandı, 2 saniye bekleniyor...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
           }
         }
+        
+        console.log(`Toplam işlem tamamlandı: ${createdCount + updatedCount} başarılı, ${errorCount} hatalı`);
         
         return {
           statusCode: 200,
           headers,
           body: JSON.stringify({
             success: true,
-            message: `${createdCount + updatedCount} ürün başarıyla işlendi`,
+            message: `${createdCount + updatedCount} ürün başarıyla işlendi (${products.length} üründen)`,
             xmlProducts: products.length,
             processedCount: createdCount + updatedCount,
             createdCount,
             updatedCount,
             errorCount,
-            processedProducts: processedProducts.slice(0, 3) // İlk 3 tanesi
+            batchCount: totalBatches,
+            processedProducts: processedProducts.slice(0, 5), // İlk 5 tanesi
+            sampleProduct: processedProducts.length > 0 ? {
+              title: processedProducts[0].title,
+              sku: processedProducts[0].sku,
+              price: processedProducts[0].price,
+              action: processedProducts[0].action
+            } : null
           })
         };
         

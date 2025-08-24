@@ -610,8 +610,9 @@ function handleStartSync() {
     const syncController = new AbortController();
     const syncTimeoutId = setTimeout(() => {
         syncController.abort();
-        addLog('Senkronizasyon zaman aşımına uğradı (30 saniye)', 'error');
-    }, 30000); // 30 saniye timeout
+        addLog('Senkronizasyon zaman aşımına uğradı (5 dakika)', 'error');
+        addLog('💡 Çok fazla ürün var, işlem devam ediyor olabilir', 'info');
+    }, 300000); // 5 dakika timeout
 
     fetch('/.netlify/functions/api/sync/start', {
         method: 'POST',
@@ -634,17 +635,28 @@ function handleStartSync() {
             addLog(`➕ Oluşturulan: ${result.createdCount}`, 'success');
             addLog(`📝 Güncellenen: ${result.updatedCount}`, 'warning');
             
+            if (result.batchCount) {
+                addLog(`📦 ${result.batchCount} batch halinde işlendi`, 'info');
+            }
+            
             if (result.errorCount > 0) {
                 addLog(`❌ Hatalı: ${result.errorCount}`, 'error');
             }
             
+            // Örnek ürün bilgisi
+            if (result.sampleProduct) {
+                const sample = result.sampleProduct;
+                const actionText = sample.action === 'created' ? 'oluşturuldu' : 'güncellendi';
+                addLog(`📋 Örnek: ${sample.title} (${actionText}) - SKU: ${sample.sku} - ₺${sample.price}`, 'info');
+            }
+            
             // İşlenen ürünlerin detayları
             if (result.processedProducts && result.processedProducts.length > 0) {
-                addLog('📋 İşlenen ürünler:', 'info');
+                addLog('📋 İlk işlenen ürünler:', 'info');
                 result.processedProducts.forEach(product => {
                     const actionText = product.action === 'created' ? 'oluşturuldu' : 'güncellendi';
                     const actionType = product.action === 'created' ? 'success' : 'warning';
-                    addLog(`  • ${product.title} (${actionText}) - ₺${product.price}`, actionType);
+                    addLog(`  • ${product.title} (${actionText}) - ₺${product.price}${product.sku ? ` - SKU: ${product.sku}` : ''}`, actionType);
                 });
             }
             
