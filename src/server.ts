@@ -36,7 +36,7 @@ app.use('/api/update-prices', priceUpdateRoutes);
 
 // Ana sayfa için HTML dosyasını sun
 app.get('/', (req, res) => {
-    res.sendFile(path.join(process.cwd(), 'index.html'));
+    res.sendFile(path.join(process.cwd(), 'public', 'index.html'));
 });
 
 // Sunucuyu başlat
