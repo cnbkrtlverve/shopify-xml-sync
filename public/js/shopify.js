@@ -9,9 +9,9 @@ class ShopifyService {
      * @returns {Promise<any>} - API'den gelen yanıt
      */
     async makeRequest(endpoint, method = 'GET', data = null) {
-        // Netlify proxy kullan - doğrudan Shopify API'sine
-        const proxyUrl = `/shopify-proxy${endpoint}`;
-        console.log(`Shopify proxy isteği: ${method} ${proxyUrl}`);
+        // Basit API isteği
+        const apiUrl = `/api/shopify${endpoint}`;
+        console.log(`API isteği: ${method} ${apiUrl}`);
 
         try {
             const options = {
@@ -24,7 +24,7 @@ class ShopifyService {
                 options.body = JSON.stringify(data);
             }
 
-            const response = await fetch(proxyUrl, options);
+            const response = await fetch(apiUrl, options);
 
             if (!response.ok) {
                 throw new Error(`HTTP hatası: ${response.status}`);
@@ -34,7 +34,7 @@ class ShopifyService {
             return responseText ? JSON.parse(responseText) : null;
 
         } catch (error) {
-            console.error(`Shopify proxy hatası: ${proxyUrl}`, error);
+            console.error(`API hatası: ${apiUrl}`, error);
             throw error;
         }
     }
@@ -45,17 +45,11 @@ class ShopifyService {
      */
     async checkConnection() {
         try {
-            // Doğrudan Shopify API'sine shop bilgisi iste
-            const data = await this.makeRequest('/shop.json');
-            if (data && data.shop) {
-                return {
-                    success: true,
-                    shop: data.shop,
-                    name: data.shop.name,
-                    domain: data.shop.domain
-                };
+            const data = await this.makeRequest('/info');
+            if (data && data.success) {
+                return data.shop;
             }
-            return { success: false, message: 'Shop bilgisi alınamadı' };
+            return { success: false, message: 'Bağlantı başarısız' };
         } catch (error) {
             console.error("Shopify bağlantı kontrolü hatası:", error);
             throw error;
