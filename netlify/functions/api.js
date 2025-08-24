@@ -113,8 +113,8 @@ exports.handler = async (event, context) => {
           body: JSON.stringify({
             success: false,
             connected: false,
-            store: 'Shopify bilgileri eksik',
-            email: 'Lütfen config sayfasından Shopify bilgilerini girin',
+            store: 'Bağlantı yok',
+            email: 'Shopify bilgilerini kontrol edin',
             productCount: 0
           })
         };
@@ -540,6 +540,74 @@ exports.handler = async (event, context) => {
       };
     };
 
+    // Basit sync endpoint
+    if (path.includes('/sync/start')) {
+      const requestHeaders = event.headers || {};
+      const shopUrl = requestHeaders['x-shopify-shop-url'] || requestHeaders['X-Shopify-Shop-Url'];
+      const accessToken = requestHeaders['x-shopify-access-token'] || requestHeaders['X-Shopify-Access-Token'];
+      
+      if (!shopUrl || !accessToken) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            message: 'Shopify bilgileri eksik'
+          })
+        };
+      }
+      
+      try {
+        // Basit test: XML'den 1 ürün al, Shopify'a gönder
+        const xmlResponse = await axios.get('https://stildiva.sentos.com.tr/xml-sentos-out/1', { timeout: 10000 });
+        const parsed = await xml2js.parseStringPromise(xmlResponse.data, { explicitArray: false, trim: true });
+        const products = Array.isArray(parsed.Urunler.Urun) ? parsed.Urunler.Urun : [parsed.Urunler.Urun];
+        
+        // İlk ürünü al
+        const firstProduct = products[0];
+        const shopifyProduct = {
+          title: firstProduct.urunismi || 'Test Ürün',
+          body_html: firstProduct.aciklama || 'Test açıklama',
+          product_type: 'XML Import',
+          vendor: 'Sentos',
+          status: 'draft',
+          variants: [{
+            price: firstProduct.satis_fiyati || '10.00',
+            inventory_quantity: parseInt(firstProduct.stok) || 0
+          }]
+        };
+        
+        // Shopify'a gönder
+        const shopifyResponse = await axios.post(`https://${shopUrl}/admin/api/2024-07/products.json`, {
+          product: shopifyProduct
+        }, {
+          headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
+          timeout: 10000
+        });
+        
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            success: true,
+            message: 'Test ürünü oluşturuldu',
+            productId: shopifyResponse.data.product.id,
+            title: shopifyProduct.title
+          })
+        };
+        
+      } catch (error) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            message: 'Sync hatası: ' + error.message
+          })
+        };
+      }
+    }
+
     // Sync endpoint
     if (path.includes('/sync') && method === 'POST') {
       const body = JSON.parse(event.body || '{}');
@@ -580,11 +648,11 @@ exports.handler = async (event, context) => {
             debug: {
               hasStoreUrl: !!SHOPIFY_STORE_URL,
               hasToken: !!SHOPIFY_ADMIN_API_TOKEN,
-              storeUrlSource: SHOPIFY_STORE_URL ? (event.headers['x-shopify-store-url'] || event.headers['X-Shopify-Store-Url'] ? 'header' : config.shopifyUrl ? 'config' : 'env') : 'none',
-              tokenSource: SHOPIFY_ADMIN_API_TOKEN ? (event.headers['x-shopify-admin-token'] || event.headers['X-Shopify-Admin-Token'] ? 'header' : config.shopifyAdminToken ? 'config' : 'env') : 'none',
+              storeUrlSource: SHOPIFY_STORE_URL ? (requestHeaders['x-shopify-shop-url'] || requestHeaders['X-Shopify-Shop-Url'] ? 'header' : config.shopifyUrl ? 'config' : 'env') : 'none',
+              tokenSource: SHOPIFY_ADMIN_API_TOKEN ? (requestHeaders['x-shopify-access-token'] || requestHeaders['X-Shopify-Access-Token'] ? 'header' : config.shopifyAdminToken ? 'config' : 'env') : 'none',
               configSource: {
                 fromGlobalConfig: !!(config.shopifyUrl && config.shopifyAdminToken),
-                fromHeaders: !!(event.headers['x-shopify-store-url'] || event.headers['X-Shopify-Store-Url']) && !!(event.headers['x-shopify-admin-token'] || event.headers['X-Shopify-Admin-Token']),
+                fromHeaders: !!(requestHeaders['x-shopify-shop-url'] || requestHeaders['X-Shopify-Shop-Url']) && !!(requestHeaders['x-shopify-access-token'] || requestHeaders['X-Shopify-Access-Token']),
                 fromEnv: !!(process.env.SHOPIFY_STORE_URL && process.env.SHOPIFY_ADMIN_API_TOKEN)
               }
             }

@@ -612,7 +612,7 @@ function handleStartSync() {
         addLog('Senkronizasyon zaman aşımına uğradı (30 saniye)', 'error');
     }, 30000); // 30 saniye timeout
 
-    fetch('/.netlify/functions/api/sync', {
+    fetch('/.netlify/functions/api/sync/start', {
         method: 'POST',
         headers: apiHeaders,
         body: JSON.stringify({ options: syncOptions }),
