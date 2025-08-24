@@ -49,5 +49,5 @@ if (process.env.NODE_ENV !== 'lambda') {
     });
 }
 
-// Netlify fonksiyonu için app'i export et
+// Sunucuyu dışa aktar (serverless ortamlar için)
 export default app;
