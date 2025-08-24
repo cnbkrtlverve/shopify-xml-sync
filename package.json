@@ -1,0 +1,27 @@
+{
+  "name": "shopify-xml-sync",
+  "version": "1.0.0",
+  "description": "XML dosyalarını Shopify ile senkronize eden uygulama",
+  "main": "index.html",
+  "scripts": {
+    "build": "echo 'Static site - no build needed'",
+    "start": "echo 'Use live server for local development'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cnbkrtlverve/shopify-xml-sync.git"
+  },
+  "keywords": [
+    "shopify",
+    "xml",
+    "sync",
+    "products"
+  ],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/cnbkrtlverve/shopify-xml-sync/issues"
+  },
+  "homepage": "https://github.com/cnbkrtlverve/shopify-xml-sync#readme",
+  "dependencies": {}
+}

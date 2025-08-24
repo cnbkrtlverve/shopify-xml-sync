@@ -20,38 +20,74 @@ class ShopifyService {
             throw new Error('Shopify Admin Access Token eksik. Lütfen yapılandırma sayfasını kontrol edin.');
         }
 
-        // Diğer istekler için Admin API
+        // CORS proxy kullanarak Admin API
         const targetUrl = `https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`;
+        const proxyUrl = `/.netlify/functions/shopify-proxy`;
         
-        console.log(`Doğrudan istek gönderiliyor: ${targetUrl}`);
-        console.log("Bu isteğin başarılı olması için tarayıcınızda bir CORS eklentisinin aktif olması gerekir.");
+        console.log(`Proxy üzerinden istek gönderiliyor: ${targetUrl}`);
 
         try {
-            const response = await fetch(targetUrl, {
+            const requestBody = {
+                url: targetUrl,
                 method: method,
                 headers: {
                     'X-Shopify-Access-Token': config.shopifyAdminToken,
                     'Content-Type': 'application/json'
+                }
+            };
+
+            if (data) {
+                requestBody.body = JSON.stringify(data);
+            }
+
+            const response = await fetch(proxyUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
                 },
-                body: data ? JSON.stringify(data) : null
+                body: JSON.stringify(requestBody)
             });
 
             if (!response.ok) {
                 const errorText = await response.text();
-                console.error('Shopify API Hatası:', `Durum: ${response.status}`, errorText);
-                throw new Error(`Shopify API'den geçersiz yanıt alındı. Durum: ${response.status}. CORS eklentinizin aktif olduğundan emin olun.`);
+                console.error('Proxy hatası:', errorText);
+                throw new Error(`Proxy hatası: ${response.status} - ${errorText}`);
             }
 
-            const responseText = await response.text();
-            if (!responseText) {
-                return null; // Boş yanıtlar geçerli olabilir
-            }
-            
-            return JSON.parse(responseText);
-
+            const result = await response.json();
+            return result;
         } catch (error) {
-            console.error('Ağ veya Fetch hatası:', error);
-            throw new Error(`Shopify API'ye ulaşılamadı: ${error.message}. Ağ bağlantınızı ve CORS eklentinizi kontrol edin.`);
+            console.error('Proxy isteği başarısız:', error);
+            
+            // Fallback: Doğrudan istek dene (CORS eklentisi aktifse çalışabilir)
+            console.log('Fallback: Doğrudan istek deneniyor...');
+            try {
+                const response = await fetch(targetUrl, {
+                    method: method,
+                    headers: {
+                        'X-Shopify-Access-Token': config.shopifyAdminToken,
+                        'Content-Type': 'application/json'
+                    },
+                    body: data ? JSON.stringify(data) : null
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Shopify API Hatası:', `Durum: ${response.status}`, errorText);
+                    throw new Error(`Shopify API'den geçersiz yanıt alındı. Durum: ${response.status}. CORS eklentinizin aktif olduğundan emin olun.`);
+                }
+
+                const responseText = await response.text();
+                if (!responseText) {
+                    return null; // Boş yanıtlar geçerli olabilir
+                }
+                
+                return JSON.parse(responseText);
+
+            } catch (fallbackError) {
+                console.error('Ağ veya Fetch hatası:', fallbackError);
+                throw new Error(`Shopify API'ye ulaşılamadı: ${fallbackError.message}. Proxy ve CORS eklentisini kontrol edin.`);
+            }
         }
     }
 
