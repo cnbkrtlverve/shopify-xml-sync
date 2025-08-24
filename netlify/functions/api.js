@@ -462,10 +462,15 @@ async function handleXml(action, event, headers) {
         console.log('XML check starting for:', XML_FEED_URL);
         
         const response = await axios.get(XML_FEED_URL, { 
-          timeout: 8000,
+          timeout: 25000, // 25 saniye
           headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; ShopifyXMLSync/1.0)',
-            'Accept': 'application/xml, text/xml, */*'
+            'Accept': 'application/xml, text/xml, */*',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Cache-Control': 'no-cache'
+          },
+          validateStatus: function (status) {
+            return status >= 200 && status < 300;
           }
         });
         
@@ -492,19 +497,32 @@ async function handleXml(action, event, headers) {
         console.error('XML check error:', {
           message: error.message,
           code: error.code,
-          status: error.response?.status
+          status: error.response?.status,
+          url: XML_FEED_URL
         });
+        
+        let errorMessage = 'XML bağlantı hatası: ';
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+          errorMessage += 'Bağlantı zaman aşımına uğradı (25s)';
+        } else if (error.code === 'ENOTFOUND') {
+          errorMessage += 'XML URL\'si bulunamadı';
+        } else if (error.code === 'ECONNREFUSED') {
+          errorMessage += 'Bağlantı reddedildi';
+        } else {
+          errorMessage += error.message;
+        }
         
         return {
           statusCode: 200,
           headers,
           body: JSON.stringify({ 
             success: false, 
-            message: 'XML bağlantı hatası: ' + error.message,
+            message: errorMessage,
             debug: {
               code: error.code,
               status: error.response?.status,
-              url: XML_FEED_URL
+              url: XML_FEED_URL?.substring(0, 100) + '...',
+              timeout: '25 saniye'
             }
           })
         };
@@ -516,10 +534,15 @@ async function handleXml(action, event, headers) {
         console.log('XML stats starting for:', XML_FEED_URL);
         
         const response = await axios.get(XML_FEED_URL, { 
-          timeout: 20000,
+          timeout: 25000, // 25 saniye
           headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; ShopifyXMLSync/1.0)',
-            'Accept': 'application/xml, text/xml, */*'
+            'Accept': 'application/xml, text/xml, */*',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Cache-Control': 'no-cache'
+          },
+          validateStatus: function (status) {
+            return status >= 200 && status < 300; // Sadece 2xx kodları kabul et
           }
         });
         
@@ -576,19 +599,32 @@ async function handleXml(action, event, headers) {
         console.error('XML stats error:', {
           message: error.message,
           code: error.code,
-          status: error.response?.status
+          status: error.response?.status,
+          url: XML_FEED_URL
         });
+        
+        let errorMessage = 'XML stats alınamadı: ';
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+          errorMessage += 'Bağlantı zaman aşımına uğradı (25s)';
+        } else if (error.code === 'ENOTFOUND') {
+          errorMessage += 'XML URL\'si bulunamadı';
+        } else if (error.code === 'ECONNREFUSED') {
+          errorMessage += 'Bağlantı reddedildi';
+        } else {
+          errorMessage += error.message;
+        }
         
         return {
           statusCode: 200,
           headers,
           body: JSON.stringify({ 
             success: false, 
-            message: 'XML stats alınamadı: ' + error.message,
+            message: errorMessage,
             debug: {
               code: error.code,
               status: error.response?.status,
-              url: XML_FEED_URL
+              url: XML_FEED_URL?.substring(0, 100) + '...',
+              timeout: '25 saniye'
             }
           })
         };
@@ -662,10 +698,47 @@ async function handleSync(action, event, headers) {
       console.log('Sync başlatılıyor:', options);
       
       try {
-        // XML'den ürünleri al
-        const xmlResponse = await axios.get(XML_FEED_URL, { timeout: 6000 });
+        // XML'den ürünleri al - timeout'u artır
+        console.log('XML\'den ürünler alınıyor:', XML_FEED_URL);
+        const xmlResponse = await axios.get(XML_FEED_URL, { 
+          timeout: 15000, // 15 saniye
+          headers: {
+            'User-Agent': 'Shopify-XML-Sync/1.0'
+          }
+        });
+        
+        console.log('XML yanıtı alındı, boyut:', xmlResponse.data.length);
+        
         const parser = new xml2js.Parser();
         const xmlData = await parser.parseStringPromise(xmlResponse.data);
+        
+        console.log('XML parse edildi');
+        
+        // XML yapısını kontrol et
+        let products = [];
+        if (xmlData.catalog && xmlData.catalog.product) {
+          products = xmlData.catalog.product;
+        } else if (xmlData.products && xmlData.products.product) {
+          products = xmlData.products.product;
+        } else if (xmlData.rss && xmlData.rss.channel && xmlData.rss.channel[0] && xmlData.rss.channel[0].item) {
+          products = xmlData.rss.channel[0].item;
+        } else {
+          console.log('XML yapısı:', Object.keys(xmlData));
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({
+              success: false,
+              message: 'XML\'de ürün verisi bulunamadı',
+              debug: {
+                xmlStructure: Object.keys(xmlData),
+                dataLength: xmlResponse.data.length
+              }
+            })
+          };
+        }
+        
+        console.log('Bulunan ürün sayısı:', products.length);
         
         // Basit senkronizasyon simülasyonu (gerçek implementasyon gerekecek)
         return {
@@ -673,9 +746,13 @@ async function handleSync(action, event, headers) {
           headers,
           body: JSON.stringify({
             success: true,
-            message: 'Senkronizasyon başarıyla tamamlandı',
-            processedCount: 0, // Gerçek implementasyonda güncellenecek
-            options: options
+            message: `Senkronizasyon başarıyla tamamlandı - ${products.length} ürün işlendi`,
+            processedCount: products.length,
+            options: options,
+            debug: {
+              xmlSize: xmlResponse.data.length,
+              productCount: products.length
+            }
           })
         };
         

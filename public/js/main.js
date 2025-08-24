@@ -428,7 +428,13 @@ async function updateDashboard() {
 
     // AbortController ile timeout
     const xmlController = new AbortController();
-    const xmlTimeoutId = setTimeout(() => xmlController.abort(), 6000);
+    const xmlTimeoutId = setTimeout(() => xmlController.abort(), 30000); // 30 saniye
+
+    console.log('XML kontrol başlatılıyor:', {
+        url: '/api/xml/check',
+        xmlUrl: config.xmlUrl,
+        headers: Object.keys(apiHeaders)
+    });
 
     fetch('/api/xml/check', {
         headers: apiHeaders,
@@ -566,24 +572,49 @@ function handleStartSync() {
     if (config.shopifyAdminToken) apiHeaders['X-Shopify-Admin-Token'] = config.shopifyAdminToken;
     if (config.xmlUrl) apiHeaders['X-XML-Feed-Url'] = config.xmlUrl;
 
-    // POST request ile sync başlat
+    // POST request ile sync başlat - AbortController ile timeout
+    const syncController = new AbortController();
+    const syncTimeoutId = setTimeout(() => {
+        syncController.abort();
+        addLog('Senkronizasyon zaman aşımına uğradı (30 saniye)', 'error');
+    }, 30000); // 30 saniye timeout
+
     fetch('/api/sync', {
         method: 'POST',
         headers: apiHeaders,
-        body: JSON.stringify({ options: syncOptions })
+        body: JSON.stringify({ options: syncOptions }),
+        signal: syncController.signal
     })
-    .then(response => response.json())
+    .then(response => {
+        clearTimeout(syncTimeoutId);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
     .then(result => {
         if (result.success) {
             addLog('Senkronizasyon başarılı!', 'success');
             addLog(`İşlenen ürün sayısı: ${result.processedCount || 0}`, 'info');
+            if (result.debug) {
+                addLog(`XML boyutu: ${result.debug.xmlSize} byte`, 'info');
+                addLog(`Bulunan ürün: ${result.debug.productCount}`, 'info');
+            }
             updateDashboard(); // Dashboard'u güncelle
         } else {
             addLog(`Senkronizasyon hatası: ${result.message}`, 'error');
+            if (result.debug) {
+                console.log('Sync debug:', result.debug);
+            }
         }
     })
     .catch(error => {
-        addLog(`Bağlantı hatası: ${error.message}`, 'error');
+        clearTimeout(syncTimeoutId);
+        if (error.name === 'AbortError') {
+            addLog('Senkronizasyon zaman aşımına uğradı', 'error');
+        } else {
+            addLog(`Bağlantı hatası: ${error.message}`, 'error');
+        }
         console.error('Sync error:', error);
     });
 }
