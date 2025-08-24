@@ -50,7 +50,7 @@ function checkGoogleCallback() {
         if (config.googleRedirectUri) apiHeaders['X-Google-Redirect-Uri'] = config.googleRedirectUri;
         
         // Backend'e authorization code'u gönder
-        fetch('/api/google/exchange-code', {
+        fetch('/.netlify/functions/api/google/exchange-code', {
             method: 'POST',
             headers: apiHeaders,
             body: JSON.stringify({ code: code })
@@ -223,7 +223,7 @@ function handleSaveConfig() {
     });
     
     // Backend'e de kaydet (Netlify'da bu sadece log amaçlı)
-    fetch('/api/config', {
+    fetch('/.netlify/functions/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -259,12 +259,12 @@ async function handleTestShopify() {
         'Content-Type': 'application/json'
     };
     
-    if (currentConfig.shopifyUrl) apiHeaders['X-Shopify-Store-Url'] = currentConfig.shopifyUrl;
-    if (currentConfig.shopifyAdminToken) apiHeaders['X-Shopify-Admin-Token'] = currentConfig.shopifyAdminToken;
+    if (currentConfig.shopifyUrl) apiHeaders['X-Shopify-Shop-Url'] = currentConfig.shopifyUrl;
+    if (currentConfig.shopifyAdminToken) apiHeaders['X-Shopify-Access-Token'] = currentConfig.shopifyAdminToken;
 
     showConfigMessage('Shopify bağlantısı test ediliyor...', 'info');
     try {
-        const result = await fetch('/api/shopify/check', {
+        const result = await fetch('/.netlify/functions/api/shopify/check', {
             headers: apiHeaders
         });
         const data = await result.json();
@@ -294,7 +294,7 @@ async function handleTestXML() {
     const timeoutId = setTimeout(() => controller.abort(), 8000);
     
     try {
-        const result = await fetch('/api/xml/check', {
+        const result = await fetch('/.netlify/functions/api/xml/check', {
             headers: apiHeaders,
             signal: controller.signal
         });
@@ -342,23 +342,23 @@ async function updateDashboard() {
         'Content-Type': 'application/json'
     };
     
-    if (config.shopifyUrl) apiHeaders['X-Shopify-Store-Url'] = config.shopifyUrl;
-    if (config.shopifyAdminToken) apiHeaders['X-Shopify-Admin-Token'] = config.shopifyAdminToken;
+    if (config.shopifyUrl) apiHeaders['X-Shopify-Shop-Url'] = config.shopifyUrl;
+    if (config.shopifyAdminToken) apiHeaders['X-Shopify-Access-Token'] = config.shopifyAdminToken;
     if (config.xmlUrl) apiHeaders['X-XML-Feed-Url'] = config.xmlUrl;
 
     console.log('Dashboard API çağrısı yapılıyor:', {
         url: '/api/shopify/info',
         headers: {
-            hasShopifyUrl: !!apiHeaders['X-Shopify-Store-Url'],
-            hasShopifyToken: !!apiHeaders['X-Shopify-Admin-Token'],
-            shopifyUrl: apiHeaders['X-Shopify-Store-Url']?.substring(0, 20) + '...'
+            hasShopifyUrl: !!apiHeaders['X-Shopify-Shop-Url'],
+            hasShopifyToken: !!apiHeaders['X-Shopify-Access-Token'],
+            shopifyUrl: apiHeaders['X-Shopify-Shop-Url']?.substring(0, 20) + '...'
         }
     });
 
     // Önce debug endpoint'i test edelim
     try {
         console.log('Debug endpoint test ediliyor...');
-        const debugResponse = await fetch('/api/debug/env', {
+        const debugResponse = await fetch('/.netlify/functions/api/debug/env', {
             headers: apiHeaders
         });
         const debugText = await debugResponse.text();
@@ -370,7 +370,7 @@ async function updateDashboard() {
         console.error('Debug endpoint hatası:', debugError);
     }
 
-    fetch('/api/shopify/info', {
+    fetch('/.netlify/functions/api/shopify/info', {
         headers: apiHeaders
     })
         .then(res => {
@@ -439,7 +439,7 @@ async function updateDashboard() {
         headers: Object.keys(apiHeaders)
     });
 
-    fetch('/api/xml/stats', {
+    fetch('/.netlify/functions/api/xml/stats', {
         headers: apiHeaders,
         signal: xmlController.signal
     })
@@ -524,7 +524,7 @@ async function updateDashboard() {
     if (config.googleRedirectUri) apiHeaders['X-Google-Redirect-Uri'] = config.googleRedirectUri;
     if (config.googleRefreshToken) apiHeaders['X-Google-Refresh-Token'] = config.googleRefreshToken;
     
-    fetch('/api/google/status', {
+    fetch('/.netlify/functions/api/google/status', {
         headers: apiHeaders
     })
         .then(res => res.json())
@@ -549,7 +549,7 @@ async function updateDashboard() {
 
     // Son Senkronizasyon Özeti
     const syncSummary = document.getElementById('last-sync-summary');
-    fetch('/api/sync/summary', {
+    fetch('/.netlify/functions/api/sync/summary', {
         headers: apiHeaders
     })
         .then(res => res.json())
@@ -601,8 +601,8 @@ function handleStartSync() {
         'Content-Type': 'application/json'
     };
     
-    if (config.shopifyUrl) apiHeaders['X-Shopify-Store-Url'] = config.shopifyUrl;
-    if (config.shopifyAdminToken) apiHeaders['X-Shopify-Admin-Token'] = config.shopifyAdminToken;
+    if (config.shopifyUrl) apiHeaders['X-Shopify-Shop-Url'] = config.shopifyUrl;
+    if (config.shopifyAdminToken) apiHeaders['X-Shopify-Access-Token'] = config.shopifyAdminToken;
     if (config.xmlUrl) apiHeaders['X-XML-Feed-Url'] = config.xmlUrl;
 
     // POST request ile sync başlat - AbortController ile timeout
@@ -612,7 +612,7 @@ function handleStartSync() {
         addLog('Senkronizasyon zaman aşımına uğradı (30 saniye)', 'error');
     }, 30000); // 30 saniye timeout
 
-    fetch('/api/sync', {
+    fetch('/.netlify/functions/api/sync', {
         method: 'POST',
         headers: apiHeaders,
         body: JSON.stringify({ options: syncOptions }),
@@ -694,7 +694,7 @@ function handleGoogleAuth() {
     if (config.googleRedirectUri) apiHeaders['X-Google-Redirect-Uri'] = config.googleRedirectUri;
 
     // Backend'deki auth URL'ini alıp yeni pencerede aç
-    fetch('/api/google/auth-url', {
+    fetch('/.netlify/functions/api/google/auth-url', {
         headers: apiHeaders
     })
         .then(res => res.json())
@@ -719,7 +719,7 @@ async function handleCreateSheet() {
     status.textContent = 'Google Sheet oluşturuluyor, lütfen bekleyin...';
     
     try {
-        const response = await fetch('/api/google/create-sheet', { method: 'POST' });
+        const response = await fetch('/.netlify/functions/api/google/create-sheet', { method: 'POST' });
         const data = await response.json();
         
         if (data.success) {
@@ -744,11 +744,11 @@ async function handleProductSearch(query) {
         'Content-Type': 'application/json'
     };
     
-    if (config.shopifyUrl) apiHeaders['X-Shopify-Store-Url'] = config.shopifyUrl;
-    if (config.shopifyAdminToken) apiHeaders['X-Shopify-Admin-Token'] = config.shopifyAdminToken;
+    if (config.shopifyUrl) apiHeaders['X-Shopify-Shop-Url'] = config.shopifyUrl;
+    if (config.shopifyAdminToken) apiHeaders['X-Shopify-Access-Token'] = config.shopifyAdminToken;
 
     try {
-        const response = await fetch(`/api/shopify/search?q=${encodeURIComponent(query)}`, {
+        const response = await fetch(`/.netlify/functions/api/shopify/search?q=${encodeURIComponent(query)}`, {
             headers: apiHeaders
         });
         const data = await response.json();

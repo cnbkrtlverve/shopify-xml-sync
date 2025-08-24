@@ -31,6 +31,72 @@ exports.handler = async (event, context) => {
       };
     }
 
+    // Shopify check endpoint  
+    if (path.includes('/shopify/check')) {
+      const shopUrl = headers['x-shopify-shop-url'] || headers['X-Shopify-Shop-Url'];
+      const accessToken = headers['x-shopify-access-token'] || headers['X-Shopify-Access-Token'];
+      
+      if (!shopUrl || !accessToken) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            connected: false,
+            message: 'Shopify bilgileri eksik. Store URL ve Access Token gerekli.'
+          })
+        };
+      }
+      
+      try {
+        // Shopify Admin API test
+        const shopifyResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/shop.json`, {
+          headers: {
+            'X-Shopify-Access-Token': accessToken,
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        });
+        
+        const shopData = shopifyResponse.data.shop;
+        
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            success: true,
+            connected: true,
+            store: shopData.name,
+            email: shopData.email,
+            domain: shopData.domain,
+            productCount: 0,
+            currency: shopData.currency,
+            timezone: shopData.timezone
+          })
+        };
+        
+      } catch (error) {
+        console.error('Shopify check hatası:', error.response?.status, error.response?.data);
+        
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            connected: false,
+            message: 'Shopify bağlantısı başarısız: ' + (error.response?.data?.errors || error.message),
+            status: error.response?.status,
+            debug: {
+              shopUrl: shopUrl,
+              hasToken: !!accessToken,
+              errorType: error.code,
+              statusCode: error.response?.status
+            }
+          })
+        };
+      }
+    }
+
     // Shopify info endpoint
     if (path.includes('/shopify/info')) {
       return {
