@@ -130,6 +130,18 @@ function loadConfigToUI() {
     if (document.getElementById('xml-url')) {
         document.getElementById('xml-url').value = config.xmlUrl || '';
     }
+    if (document.getElementById('google-client-id')) {
+        document.getElementById('google-client-id').value = config.googleClientId || '';
+    }
+    if (document.getElementById('google-client-secret')) {
+        document.getElementById('google-client-secret').value = config.googleClientSecret || '';
+    }
+    if (document.getElementById('google-redirect-uri')) {
+        document.getElementById('google-redirect-uri').value = config.googleRedirectUri || '';
+    }
+    if (document.getElementById('google-refresh-token')) {
+        document.getElementById('google-refresh-token').value = config.googleRefreshToken || '';
+    }
     if (document.getElementById('google-sheet-id')) {
         document.getElementById('google-sheet-id').value = config.googleSheetId || '';
     }
@@ -139,12 +151,20 @@ function handleSaveConfig() {
     const shopifyUrl = document.getElementById('shopify-url').value;
     const shopifyAdminToken = document.getElementById('shopify-admin-token').value;
     const xmlUrl = document.getElementById('xml-url').value;
+    const googleClientId = document.getElementById('google-client-id').value;
+    const googleClientSecret = document.getElementById('google-client-secret').value;
+    const googleRedirectUri = document.getElementById('google-redirect-uri').value;
+    const googleRefreshToken = document.getElementById('google-refresh-token').value;
     const googleSheetId = document.getElementById('google-sheet-id').value;
     
     window.configService.saveConfig({ 
         shopifyUrl, 
         shopifyAdminToken, 
         xmlUrl,
+        googleClientId,
+        googleClientSecret,
+        googleRedirectUri,
+        googleRefreshToken,
         googleSheetId 
     });
     
@@ -156,6 +176,10 @@ function handleSaveConfig() {
             SHOPIFY_STORE_URL: shopifyUrl,
             SHOPIFY_ADMIN_API_TOKEN: shopifyAdminToken,
             XML_FEED_URL: xmlUrl,
+            GOOGLE_CLIENT_ID: googleClientId,
+            GOOGLE_CLIENT_SECRET: googleClientSecret,
+            GOOGLE_REDIRECT_URI: googleRedirectUri,
+            GOOGLE_REFRESH_TOKEN: googleRefreshToken,
             GOOGLE_SHEET_ID: googleSheetId
         })
     })
@@ -415,6 +439,13 @@ function addLog(message, type = 'info') {
 // --- YENİ FONKSİYONLAR ---
 
 function handleStartSync() {
+    const config = window.configService.getConfig();
+    
+    if (!config.shopifyUrl || !config.shopifyAdminToken || !config.xmlUrl) {
+        alert('Lütfen önce konfigürasyonu tamamlayın.');
+        return;
+    }
+
     const syncOptions = {
         full: document.getElementById('sync-full').checked,
         price: document.getElementById('sync-price').checked,
@@ -427,23 +458,34 @@ function handleStartSync() {
     logContainer.innerHTML = ''; // Önceki logları temizle
     addLog('Senkronizasyon başlatılıyor...', 'info');
 
-    const eventSource = new EventSource(`/api/sync/start?options=${JSON.stringify(syncOptions)}`);
-
-    eventSource.onmessage = function(event) {
-        const log = JSON.parse(event.data);
-        addLog(log.message, log.level);
+    // Header'ları hazırla
+    const apiHeaders = {
+        'Content-Type': 'application/json'
     };
+    
+    if (config.shopifyUrl) apiHeaders['X-Shopify-Store-Url'] = config.shopifyUrl;
+    if (config.shopifyAdminToken) apiHeaders['X-Shopify-Admin-Token'] = config.shopifyAdminToken;
+    if (config.xmlUrl) apiHeaders['X-XML-Feed-Url'] = config.xmlUrl;
 
-    eventSource.onerror = function(err) {
-        addLog('Sunucuyla bağlantı kesildi veya bir hata oluştu.', 'error');
-        console.error("EventSource failed:", err);
-        eventSource.close();
-    };
-
-    eventSource.addEventListener('close', function() {
-        addLog('Senkronizasyon tamamlandı.', 'info');
-        eventSource.close();
-        updateDashboard(); // Dashboard'u güncelle
+    // POST request ile sync başlat
+    fetch('/api/sync', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({ options: syncOptions })
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            addLog('Senkronizasyon başarılı!', 'success');
+            addLog(`İşlenen ürün sayısı: ${result.processedCount || 0}`, 'info');
+            updateDashboard(); // Dashboard'u güncelle
+        } else {
+            addLog(`Senkronizasyon hatası: ${result.message}`, 'error');
+        }
+    })
+    .catch(error => {
+        addLog(`Bağlantı hatası: ${error.message}`, 'error');
+        console.error('Sync error:', error);
     });
 }
 
@@ -487,11 +529,22 @@ async function handleCreateSheet() {
 }
 
 async function handleProductSearch(query) {
+    const config = window.configService.getConfig();
     const resultsContainer = document.getElementById('search-results-container');
     resultsContainer.innerHTML = '<div class="loader"></div>'; // Yükleniyor animasyonu
 
+    // Header'ları hazırla
+    const apiHeaders = {
+        'Content-Type': 'application/json'
+    };
+    
+    if (config.shopifyUrl) apiHeaders['X-Shopify-Store-Url'] = config.shopifyUrl;
+    if (config.shopifyAdminToken) apiHeaders['X-Shopify-Admin-Token'] = config.shopifyAdminToken;
+
     try {
-        const response = await fetch(`/api/shopify/search?q=${encodeURIComponent(query)}`);
+        const response = await fetch(`/api/shopify/search?q=${encodeURIComponent(query)}`, {
+            headers: apiHeaders
+        });
         const data = await response.json();
 
         if (data.success && data.products) {

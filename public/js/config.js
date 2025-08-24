@@ -10,7 +10,12 @@ class ConfigService {
             shopifyUrl: localStorage.getItem('shopify_url') || '',
             shopifyAdminToken: localStorage.getItem('shopify_admin_token') || '',
             shopifyStorefrontToken: localStorage.getItem('shopify_storefront_token') || '',
-            xmlUrl: localStorage.getItem('xml_url') || ''
+            xmlUrl: localStorage.getItem('xml_url') || '',
+            googleClientId: localStorage.getItem('google_client_id') || '',
+            googleClientSecret: localStorage.getItem('google_client_secret') || '',
+            googleRedirectUri: localStorage.getItem('google_redirect_uri') || '',
+            googleRefreshToken: localStorage.getItem('google_refresh_token') || '',
+            googleSheetId: localStorage.getItem('google_sheet_id') || ''
         };
         return this.config;
     }
@@ -20,6 +25,11 @@ class ConfigService {
         localStorage.setItem('shopify_admin_token', config.shopifyAdminToken || '');
         localStorage.setItem('shopify_storefront_token', config.shopifyStorefrontToken || '');
         localStorage.setItem('xml_url', config.xmlUrl || '');
+        localStorage.setItem('google_client_id', config.googleClientId || '');
+        localStorage.setItem('google_client_secret', config.googleClientSecret || '');
+        localStorage.setItem('google_redirect_uri', config.googleRedirectUri || '');
+        localStorage.setItem('google_refresh_token', config.googleRefreshToken || '');
+        localStorage.setItem('google_sheet_id', config.googleSheetId || '');
         this.loadConfig(); // Update internal state
     }
     
