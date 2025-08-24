@@ -11,6 +11,12 @@ document.addEventListener('DOMContentLoaded', () => {
     window.googleService = window.googleService || {};
 
     // Check login state and setup UI
+    // Demo için otomatik login yapalım
+    if (!window.authService.isLoggedIn()) {
+        // Otomatik giriş yap
+        window.authService.login('admin', '1234');
+    }
+    
     if (window.authService.isLoggedIn()) {
         document.getElementById('app-container').style.display = 'block';
         document.getElementById('login-container').style.display = 'none';
