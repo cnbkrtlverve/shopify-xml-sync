@@ -160,11 +160,11 @@ function handleSaveConfig() {
 }
 
 async function handleTestShopify() {
-    const shopifyStoreUrl = document.getElementById('shopify-store-url').value;
-    const shopifyToken = document.getElementById('shopify-token').value;
+    const shopifyStoreUrl = document.getElementById('shopify-store-url')?.value || 'c1grp2-yr.myshopify.com';
+    const shopifyToken = document.getElementById('shopify-token')?.value || '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';
     
     if (!shopifyStoreUrl || !shopifyToken) {
-        showConfigMessage('Lütfen Shopify ayarlarını doldurun!', 'error');
+        showConfigMessage('Shopify ayarları eksik!', 'error');
         return;
     }
     
@@ -192,17 +192,17 @@ async function handleTestShopify() {
 }
 
 async function handleTestXML() {
-    const xmlFeedUrl = document.getElementById('xml-feed-url').value;
+    const xmlFeedUrl = document.getElementById('xml-feed-url')?.value || 'https://stildiva.sentos.com.tr/xml-sentos-out/1';
     
     if (!xmlFeedUrl) {
-        showConfigMessage('Lütfen XML Feed URL\'sini doldurun!', 'error');
+        showConfigMessage('XML URL eksik!', 'error');
         return;
     }
     
     showConfigMessage('XML bağlantısı test ediliyor...', 'info');
     
     try {
-        // Geçici config kaydet
+        // Config kaydet
         window.configService.setConfig({
             xmlUrl: xmlFeedUrl
         });

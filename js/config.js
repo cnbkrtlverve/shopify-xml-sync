@@ -34,7 +34,23 @@ class Config {
     isConfigured() {
         return this.shopifyStoreUrl && this.shopifyToken && this.xmlFeedUrl;
     }
+    
+    // Yeni metod - geçici config için
+    setConfig(config) {
+        if (config.shopifyUrl) this.shopifyStoreUrl = config.shopifyUrl;
+        if (config.shopifyToken) this.shopifyToken = config.shopifyToken;
+        if (config.xmlUrl) this.xmlFeedUrl = config.xmlUrl;
+    }
+    
+    getConfig() {
+        return {
+            shopifyUrl: this.shopifyStoreUrl,
+            shopifyToken: this.shopifyToken,
+            xmlUrl: this.xmlFeedUrl
+        };
+    }
 }
 
 // Global config instance
 window.appConfig = new Config();
+window.configService = window.appConfig; // Alias için
