@@ -426,10 +426,16 @@ async function updateDashboard() {
     const xmlProducts = document.getElementById('xml-products');
     const lastChecked = document.getElementById('xml-last-checked');
 
-    fetch('/api/xml/stats', {
-        headers: apiHeaders
+    // AbortController ile timeout
+    const xmlController = new AbortController();
+    const xmlTimeoutId = setTimeout(() => xmlController.abort(), 6000);
+
+    fetch('/api/xml/check', {
+        headers: apiHeaders,
+        signal: xmlController.signal
     })
         .then(res => {
+            clearTimeout(xmlTimeoutId);
             if (!res.ok) {
                 throw new Error(`HTTP ${res.status}: ${res.statusText}`);
             }
@@ -444,21 +450,26 @@ async function updateDashboard() {
                 if (data.success) {
                     xmlStatus.textContent = 'Bağlandı';
                     xmlStatus.className = 'status-badge success';
-                    xmlSourceUrl.textContent = data.url || 'N/A';
-                    xmlProducts.textContent = data.productCount || 0;
+                    xmlSourceUrl.textContent = config.xmlUrl || 'N/A';
+                    xmlProducts.textContent = data.debug?.dataLength ? 'Veri var' : 'N/A';
                     lastChecked.textContent = new Date().toLocaleString();
                 } else {
-                    throw new Error(data.message || 'XML istatistikleri alınamadı.');
+                    throw new Error(data.message || 'XML\'e bağlanılamadı.');
                 }
             } catch (jsonError) {
-                console.error('JSON Parse Error:', jsonError);
-                console.log('Raw response:', text);
+                console.error('XML JSON Parse Error:', jsonError);
                 throw new Error('Geçersiz JSON yanıtı alındı');
             }
         })
         .catch(e => {
-            console.error('XML dashboard hatası:', e);
-            xmlStatus.textContent = 'Hata';
+            clearTimeout(xmlTimeoutId);
+            if (e.name === 'AbortError') {
+                console.log('XML zaman aşımı (6s)');
+                xmlStatus.textContent = 'Zaman Aşımı';
+            } else {
+                console.error('XML dashboard hatası:', e);
+                xmlStatus.textContent = 'Hata';
+            }
             xmlStatus.className = 'status-badge error';
             xmlSourceUrl.textContent = 'N/A';
             xmlProducts.textContent = 'N/A';
@@ -467,11 +478,19 @@ async function updateDashboard() {
     
     // Google Status
     const googleStatus = document.getElementById('google-status');
+    
+    // Google header'larını ekle
+    if (config.googleClientId) apiHeaders['X-Google-Client-Id'] = config.googleClientId;
+    if (config.googleClientSecret) apiHeaders['X-Google-Client-Secret'] = config.googleClientSecret;
+    if (config.googleRedirectUri) apiHeaders['X-Google-Redirect-Uri'] = config.googleRedirectUri;
+    if (config.googleRefreshToken) apiHeaders['X-Google-Refresh-Token'] = config.googleRefreshToken;
+    
     fetch('/api/google/status', {
         headers: apiHeaders
     })
         .then(res => res.json())
         .then(data => {
+            console.log('Google status response:', data);
             if (data.isAuthenticated) {
                 googleStatus.textContent = 'Bağlandı';
                 googleStatus.className = 'status-badge success';
@@ -483,7 +502,8 @@ async function updateDashboard() {
                 googleStatus.className = 'status-badge warn';
             }
         })
-        .catch(() => {
+        .catch((error) => {
+            console.error('Google status error:', error);
             googleStatus.textContent = 'Hata';
             googleStatus.className = 'status-badge error';
         });

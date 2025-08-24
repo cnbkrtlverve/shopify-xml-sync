@@ -735,12 +735,27 @@ async function handleGoogle(action, event, headers) {
                                   event.headers['x-google-refresh-token'] || 
                                   event.headers['X-Google-Refresh-Token'];
       
+      console.log('Google status check:', {
+        hasRefreshToken: !!GOOGLE_REFRESH_TOKEN,
+        hasClientId: !!GOOGLE_CLIENT_ID,
+        hasClientSecret: !!GOOGLE_CLIENT_SECRET,
+        refreshTokenSource: process.env.GOOGLE_REFRESH_TOKEN ? 'env' : 'header'
+      });
+      
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({
+          success: true,
+          connected: !!GOOGLE_REFRESH_TOKEN,
           isAuthenticated: !!GOOGLE_REFRESH_TOKEN,
-          hasConfig: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET)
+          hasConfig: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET),
+          debug: {
+            hasRefreshToken: !!GOOGLE_REFRESH_TOKEN,
+            hasClientId: !!GOOGLE_CLIENT_ID,
+            hasClientSecret: !!GOOGLE_CLIENT_SECRET,
+            refreshTokenSource: process.env.GOOGLE_REFRESH_TOKEN ? 'env' : 'header'
+          }
         })
       };
     }
