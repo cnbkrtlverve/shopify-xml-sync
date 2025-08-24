@@ -11,7 +11,18 @@ export function getLatestSyncSummary(): string {
     return latestSummary;
 }
 
-export async function runSync(logCallback: (message: string, level: 'info' | 'success' | 'error' | 'warn') => void): Promise<string> {
+export interface SyncOptions {
+    full: boolean;
+    price: boolean;
+    inventory: boolean;
+    details: boolean;
+    images: boolean;
+}
+
+export async function runSync(
+    logCallback: (message: string, level: 'info' | 'success' | 'error' | 'warn') => void,
+    options: SyncOptions = { full: true, price: false, inventory: false, details: false, images: false }
+): Promise<string> {
     logCallback('Senkronizasyon başlatıldı...', 'warn');
     const startTime = Date.now();
 
@@ -19,10 +30,13 @@ export async function runSync(logCallback: (message: string, level: 'info' | 'su
         const productsFromXml: Product[] = await getProductsFromXml();
         logCallback(`XML kaynağından ${productsFromXml.length} ana ürün bulundu.`, 'info');
 
-        try {
-            await updateProductSheetWithNewItems(productsFromXml, logCallback);
-        } catch (googleError: any) {
-            logCallback(`Google Sheet güncellenirken bir hata oluştu: ${googleError.message}`, 'error');
+        // Google Sheet güncellemesi sadece tam senkronizasyonda mantıklı
+        if (options.full) {
+            try {
+                await updateProductSheetWithNewItems(productsFromXml, logCallback);
+            } catch (googleError: any) {
+                logCallback(`Google Sheet güncellenirken bir hata oluştu: ${googleError.message}`, 'error');
+            }
         }
 
         let createdCount = 0;
@@ -32,9 +46,11 @@ export async function runSync(logCallback: (message: string, level: 'info' | 'su
             try {
                 const existingProduct = await findProductByHandle(product.handle);
                 if (existingProduct) {
-                    await updateShopifyProduct(existingProduct.id, existingProduct.variants, product, logCallback);
+                    // Seçenekleri güncelleme fonksiyonuna iletiyoruz
+                    await updateShopifyProduct(existingProduct.id, existingProduct.variants, product, options, logCallback);
                     updatedCount++;
                 } else {
+                    // Yeni ürünler her zaman tam olarak oluşturulur
                     await createShopifyProduct(product, logCallback);
                     createdCount++;
                 }
@@ -47,7 +63,6 @@ export async function runSync(logCallback: (message: string, level: 'info' | 'su
         const summary = `Senkronizasyon tamamlandı! Süre: ${duration.toFixed(2)}s. Oluşturulan: ${createdCount}, Güncellenen: ${updatedCount}.`;
         logCallback(summary, 'success');
         
-        // DÜZELTME: İşlem bitince özet değişkeni güncelleniyor.
         latestSummary = summary;
         return summary;
 
@@ -55,7 +70,6 @@ export async function runSync(logCallback: (message: string, level: 'info' | 'su
         const summary = `Senkronizasyon başarısız oldu: ${error.message}`;
         logCallback(summary, 'error');
         
-        // DÜZELTME: Hata durumunda da özet değişkeni güncelleniyor.
         latestSummary = summary;
         throw new Error(summary);
     }

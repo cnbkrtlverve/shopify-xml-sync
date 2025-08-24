@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, json } from 'express';
 import { runSync, getLatestSyncSummary } from '../services/syncService';
 import { getShopifyStoreInfo, getShopifyStats, searchShopifyProducts } from '../services/shopifyService';
 import { getGoogleAuthUrl, getGoogleTokens, isGoogleAuthenticated } from '../services/googleAuthService';
@@ -15,6 +15,8 @@ export const createSyncRouter = (
 
     // Not: Bu dosya artık kendi log fonksiyonunu oluşturmuyor, app.ts'ten gelenleri kullanıyor.
 
+    router.use(json()); // JSON body'lerini parse etmek için
+
     router.get('/status', async (req: Request, res: Response) => {
         try {
             const [shopify, xml] = await Promise.all([
@@ -28,10 +30,11 @@ export const createSyncRouter = (
     });
 
     router.post('/sync', async (req: Request, res: Response) => {
+        const { options } = req.body;
         res.status(202).json({ message: 'Senkronizasyon işlemi başlatıldı.' });
         try {
-            // runSync, artık broadcastLog'u parametre olarak alıyor.
-            const summary = await runSync(broadcastLog);
+            // runSync, artık broadcastLog ve seçenekleri parametre olarak alıyor.
+            const summary = await runSync(broadcastLog, options);
             // Senkronizasyon bitince, app.ts'ten gelen onSyncComplete fonksiyonu çağrılıyor.
             onSyncComplete(summary);
         } catch (error: any) {

@@ -86,6 +86,17 @@
                     <h2>Senkronizasyon</h2>
                     <button id="sync-button">Senkronizasyonu Başlat</button>
                 </div>
+                <div id="sync-options" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                    <h4>Zorunlu Güncelleme Seçenekleri:</h4>
+                    <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+                        <label><input type="checkbox" id="sync-opt-full" checked> Tam Senkronizasyon</label>
+                        <label><input type="checkbox" class="sync-opt-partial" data-sync="price"> Sadece Fiyat</label>
+                        <label><input type="checkbox" class="sync-opt-partial" data-sync="inventory"> Sadece Stok</label>
+                        <label><input type="checkbox" class="sync-opt-partial" data-sync="details"> Sadece Açıklama/Detay</label>
+                        <label><input type="checkbox" class="sync-opt-partial" data-sync="images"> Sadece Fotoğraflar</label>
+                    </div>
+                    <small style="display: block; margin-top: 0.5rem; color: #555;">"Tam Senkronizasyon" seçiliyken diğer seçenekler devre dışı kalır. Yalnızca belirli alanları güncellemek için bu seçeneğin işaretini kaldırın.</small>
+                </div>
             </div>
             <div class="card">
                 <h2>Senkronizasyon Kayıtları (Log)</h2>
@@ -142,6 +153,8 @@
         const pages = document.querySelectorAll('.page');
         const logContainer = document.getElementById('log-container');
         const syncButton = document.getElementById('sync-button');
+        const syncOptFull = document.getElementById('sync-opt-full');
+        const partialSyncOpts = document.querySelectorAll('.sync-opt-partial');
         
         // Dashboard elementleri
         const shopifyStatusEl = document.getElementById('shopify-status');
@@ -263,12 +276,47 @@
             });
         });
 
+        syncOptFull.addEventListener('change', () => {
+            const isChecked = syncOptFull.checked;
+            partialSyncOpts.forEach(opt => {
+                opt.disabled = isChecked;
+                if (isChecked) {
+                    opt.checked = false;
+                }
+            });
+        });
+
+        partialSyncOpts.forEach(opt => {
+            opt.addEventListener('change', () => {
+                const anyPartialChecked = Array.from(partialSyncOpts).some(o => o.checked);
+                if (anyPartialChecked) {
+                    syncOptFull.checked = false;
+                    syncOptFull.disabled = false; // Make sure full sync can be re-enabled
+                }
+            });
+        });
+
         syncButton.addEventListener('click', async () => {
             syncButton.disabled = true;
             syncButton.textContent = 'Senkronize Ediliyor...';
             addLog('Senkronizasyon talebi sunucuya iletildi.', 'warn');
+
+            const syncOptions = {
+                full: syncOptFull.checked,
+                price: document.querySelector('[data-sync="price"]').checked,
+                inventory: document.querySelector('[data-sync="inventory"]').checked,
+                details: document.querySelector('[data-sync="details"]').checked,
+                images: document.querySelector('[data-sync="images"]').checked,
+            };
+
             try {
-                await fetch('/api/sync', { method: 'POST' });
+                await fetch('/api/sync', { 
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ options: syncOptions })
+                });
             } catch (error) {
                 addLog(`Senkronizasyon başlatılamadı: ${error.message}`, 'error');
             }

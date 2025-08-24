@@ -173,51 +173,78 @@ export async function updateShopifyProduct(
     productId: string, 
     existingVariants: { id: string, sku: string }[], 
     product: Product,
-    logCallback: (message: string, level: 'info' | 'success') => void
+    options: { full: boolean; price: boolean; inventory: boolean; details: boolean; images: boolean },
+    logCallback: (message: string, level: 'info' | 'success' | 'warn') => void
 ) {
     const shopifyApi = getShopifyApiClient();
     const productIdNumber = productId.split('/').pop();
 
-    const productUpdatePayload = {
-        product: {
-            id: productIdNumber,
-            title: product.title,
-            body_html: product.body_html,
-            vendor: product.vendor,
-            product_type: product.product_type,
-            tags: product.tags.join(','),
-            product_category: product.product_category,
-        }
-    };
-    await shopifyApi.put(`/products/${productIdNumber}.json`, productUpdatePayload);
-    logCallback(`-> Ana ürün bilgileri güncellendi (Satıcı: ${product.vendor}, Başlık vb.).`, 'info');
+    const productUpdatePayload: any = { product: { id: productIdNumber } };
+    let updatedFields: string[] = [];
 
+    // Detayları (başlık, açıklama, satıcı vb.) güncelle
+    if (options.full || options.details) {
+        productUpdatePayload.product.title = product.title;
+        productUpdatePayload.product.body_html = product.body_html;
+        productUpdatePayload.product.vendor = product.vendor;
+        productUpdatePayload.product.product_type = product.product_type;
+        productUpdatePayload.product.tags = product.tags.join(',');
+        productUpdatePayload.product.product_category = product.product_category;
+        updatedFields.push('Detaylar');
+    }
+
+    // Resimleri güncelle
+    if (options.full || options.images) {
+        if (product.images && product.images.length > 0) {
+            productUpdatePayload.product.images = product.images;
+            updatedFields.push('Resimler');
+        }
+    }
+
+    // Sadece güncellenecek alan varsa ana ürün PUT isteği gönder
+    if (Object.keys(productUpdatePayload.product).length > 1) {
+        await shopifyApi.put(`/products/${productIdNumber}.json`, productUpdatePayload);
+        logCallback(`-> Ana ürün güncellendi: [${updatedFields.join(', ')}]`, 'info');
+    }
+
+    // Varyantları güncelle
     for (const xmlVariant of product.variants) {
         const shopifyVariant = existingVariants.find(v => v.sku === xmlVariant.sku);
         const variantIdNumber = shopifyVariant?.id.split('/').pop();
 
         if (shopifyVariant && variantIdNumber) {
-            const variantUpdatePayload = {
-                variant: {
-                    id: variantIdNumber,
-                    price: String(xmlVariant.price),
-                    inventory_quantity: xmlVariant.inventory_quantity,
-                }
-            };
-            await shopifyApi.put(`/variants/${variantIdNumber}.json`, variantUpdatePayload);
-            logCallback(`--> Varyant güncellendi (SKU: ${xmlVariant.sku}, Stok: ${xmlVariant.inventory_quantity}, Fiyat: ${xmlVariant.price})`, 'info');
+            const variantUpdatePayload: any = { variant: { id: variantIdNumber } };
+            let updatedVariantFields: string[] = [];
+
+            if (options.full || options.price) {
+                variantUpdatePayload.variant.price = String(xmlVariant.price);
+                updatedVariantFields.push(`Fiyat: ${xmlVariant.price}`);
+            }
+            if (options.full || options.inventory) {
+                variantUpdatePayload.variant.inventory_quantity = xmlVariant.inventory_quantity;
+                updatedVariantFields.push(`Stok: ${xmlVariant.inventory_quantity}`);
+            }
+
+            if (Object.keys(variantUpdatePayload.variant).length > 1) {
+                await shopifyApi.put(`/variants/${variantIdNumber}.json`, variantUpdatePayload);
+                logCallback(`--> Varyant güncellendi (SKU: ${xmlVariant.sku}): [${updatedVariantFields.join(', ')}]`, 'info');
+            }
         } else {
-            const newVariantPayload = {
-                variant: {
-                    price: String(xmlVariant.price),
-                    sku: xmlVariant.sku,
-                    inventory_management: "shopify",
-                    inventory_quantity: xmlVariant.inventory_quantity,
-                    option1: xmlVariant.option1,
-                }
-            };
-            await shopifyApi.post(`/products/${productIdNumber}/variants.json`, newVariantPayload);
-            logCallback(`--> YENİ varyant eklendi (SKU: ${xmlVariant.sku}, Beden: ${xmlVariant.option1})`, 'success');
+            // Eğer varyant yoksa ve tam senkronizasyon değilse, yeni varyant ekleme.
+            // Sadece tam senkronizasyonda yeni varyantlar eklenir.
+            if (options.full) {
+                const newVariantPayload = {
+                    variant: {
+                        price: String(xmlVariant.price),
+                        sku: xmlVariant.sku,
+                        inventory_management: "shopify",
+                        inventory_quantity: xmlVariant.inventory_quantity,
+                        option1: xmlVariant.option1,
+                    }
+                };
+                await shopifyApi.post(`/products/${productIdNumber}/variants.json`, newVariantPayload);
+                logCallback(`--> YENİ varyant eklendi (SKU: ${xmlVariant.sku}, Beden: ${xmlVariant.option1})`, 'success');
+            }
         }
     }
 }
