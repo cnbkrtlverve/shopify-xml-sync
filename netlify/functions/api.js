@@ -699,87 +699,99 @@ async function handleSync(action, event, headers) {
       
       try {
         // XML'den ürünleri al - timeout'u artır
-        console.log('XML\'den ürünler alınıyor:', XML_FEED_URL);
+        console.log('XML\'den ürünler alınıyor:', XML_FEED_URL?.substring(0, 100) + '...');
+        
         const xmlResponse = await axios.get(XML_FEED_URL, { 
-          timeout: 15000, // 15 saniye
+          timeout: 10000, // 10 saniye (Netlify timeout'u önlemek için)
           headers: {
-            'User-Agent': 'Shopify-XML-Sync/1.0'
-          }
+            'User-Agent': 'Shopify-XML-Sync/1.0',
+            'Accept': 'application/xml, text/xml, */*'
+          },
+          maxContentLength: 50 * 1024 * 1024, // 50MB max
+          maxBodyLength: 50 * 1024 * 1024
         });
         
         console.log('XML yanıtı alındı, boyut:', xmlResponse.data.length);
         
-        const parser = new xml2js.Parser();
-        const xmlData = await parser.parseStringPromise(xmlResponse.data);
+        // Memory kontrolü - çok büyük XML'leri işleme
+        if (xmlResponse.data.length > 10 * 1024 * 1024) { // 10MB'dan büyükse
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({
+              success: false,
+              message: 'XML dosyası çok büyük (10MB limit)',
+              debug: {
+                xmlSize: xmlResponse.data.length,
+                limit: '10MB'
+              }
+            })
+          };
+        }
         
+        // XML parsing - simplified parser kullan
+        const xml2js = require('xml2js');
+        const parser = new xml2js.Parser({
+          explicitArray: false,
+          trim: true,
+          mergeAttrs: true,
+          ignoreAttrs: false,
+          parseNumbers: false,
+          parseBooleans: false
+        });
+        
+        console.log('XML parse ediliyor...');
+        const xmlData = await parser.parseStringPromise(xmlResponse.data);
         console.log('XML parse edildi');
         
-        // XML yapısını kontrol et ve ürünleri bul
+        // XML yapısını kontrol et ve ürünleri bul - basitleştirilmiş
         let products = [];
-        let xmlStructure = {};
+        let foundPath = '';
         
-        // XML yapısını analiz et
-        const analyzeXML = (obj, path = '') => {
-          if (typeof obj === 'object' && obj !== null) {
-            Object.keys(obj).forEach(key => {
-              const fullPath = path ? `${path}.${key}` : key;
-              xmlStructure[fullPath] = Array.isArray(obj[key]) ? `Array[${obj[key].length}]` : typeof obj[key];
-              if (typeof obj[key] === 'object') {
-                analyzeXML(obj[key], fullPath);
-              }
-            });
-          }
-        };
+        console.log('XML root anahtarları:', Object.keys(xmlData));
         
-        analyzeXML(xmlData);
-        console.log('XML yapısı analizi:', xmlStructure);
-        
-        // Çeşitli XML formatlarını dene
-        if (xmlData.catalog && xmlData.catalog.product) {
+        // Hızlı format kontrolü
+        if (xmlData.catalog?.product) {
           products = Array.isArray(xmlData.catalog.product) ? xmlData.catalog.product : [xmlData.catalog.product];
-          console.log('Catalog format bulundu');
-        } else if (xmlData.products && xmlData.products.product) {
+          foundPath = 'catalog.product';
+        } else if (xmlData.products?.product) {
           products = Array.isArray(xmlData.products.product) ? xmlData.products.product : [xmlData.products.product];
-          console.log('Products format bulundu');
-        } else if (xmlData.rss && xmlData.rss.channel && xmlData.rss.channel[0] && xmlData.rss.channel[0].item) {
+          foundPath = 'products.product';
+        } else if (xmlData.rss?.channel?.[0]?.item) {
           products = xmlData.rss.channel[0].item;
-          console.log('RSS format bulundu');
-        } else if (xmlData.root && xmlData.root.product) {
+          foundPath = 'rss.channel[0].item';
+        } else if (xmlData.root?.product) {
           products = Array.isArray(xmlData.root.product) ? xmlData.root.product : [xmlData.root.product];
-          console.log('Root format bulundu');
+          foundPath = 'root.product';
         } else if (xmlData.product) {
           products = Array.isArray(xmlData.product) ? xmlData.product : [xmlData.product];
-          console.log('Direct product format bulundu');
-        } else if (xmlData.items && xmlData.items.item) {
+          foundPath = 'product';
+        } else if (xmlData.items?.item) {
           products = Array.isArray(xmlData.items.item) ? xmlData.items.item : [xmlData.items.item];
-          console.log('Items format bulundu');
+          foundPath = 'items.item';
         } else {
-          // En son çare: herhangi bir array alanı bul
-          const findArrays = (obj, path = '') => {
-            let arrays = [];
-            if (typeof obj === 'object' && obj !== null) {
-              Object.keys(obj).forEach(key => {
-                if (Array.isArray(obj[key]) && obj[key].length > 0) {
-                  arrays.push({ path: path ? `${path}.${key}` : key, data: obj[key] });
-                } else if (typeof obj[key] === 'object') {
-                  arrays = arrays.concat(findArrays(obj[key], path ? `${path}.${key}` : key));
+          // Son çare: ilk seviyede array olan ilk alanı bul
+          for (const [key, value] of Object.entries(xmlData)) {
+            if (Array.isArray(value) && value.length > 0) {
+              products = value;
+              foundPath = key;
+              break;
+            } else if (typeof value === 'object' && value !== null) {
+              for (const [subKey, subValue] of Object.entries(value)) {
+                if (Array.isArray(subValue) && subValue.length > 0) {
+                  products = subValue;
+                  foundPath = `${key}.${subKey}`;
+                  break;
                 }
-              });
+              }
+              if (products.length > 0) break;
             }
-            return arrays;
-          };
-          
-          const foundArrays = findArrays(xmlData);
-          console.log('Bulunan array alanları:', foundArrays.map(a => a.path));
-          
-          if (foundArrays.length > 0) {
-            products = foundArrays[0].data;
-            console.log(`${foundArrays[0].path} formatı kullanılıyor`);
           }
         }
         
+        console.log(`Ürünler bulundu: ${foundPath}, sayı: ${products.length}`);
+        
         if (products.length === 0) {
-          console.log('XML yapısı:', Object.keys(xmlData));
           return {
             statusCode: 400,
             headers,
@@ -787,10 +799,9 @@ async function handleSync(action, event, headers) {
               success: false,
               message: 'XML\'de ürün verisi bulunamadı',
               debug: {
-                xmlStructure: xmlStructure,
                 rootKeys: Object.keys(xmlData),
                 dataLength: xmlResponse.data.length,
-                firstLevel: typeof xmlData === 'object' ? Object.keys(xmlData) : 'Not object'
+                checkedPaths: ['catalog.product', 'products.product', 'rss.channel[0].item', 'root.product', 'product', 'items.item']
               }
             })
           };
@@ -798,13 +809,12 @@ async function handleSync(action, event, headers) {
         
         console.log('Bulunan ürün sayısı:', products.length);
         
-        // İlk ürünün yapısını kontrol et
-        if (products.length > 0) {
-          console.log('İlk ürün yapısı:', Object.keys(products[0]));
-          console.log('İlk ürün örneği:', JSON.stringify(products[0]).substring(0, 200) + '...');
-        }
+        // İlk ürünün temel bilgilerini al (memory'yi korumak için sadece anahtarlar)
+        const firstProductKeys = products.length > 0 ? Object.keys(products[0]).slice(0, 10) : [];
         
-        // Basit senkronizasyon simülasyonu (gerçek implementasyon gerekecek)
+        // Memory'yi korumak için ürün detaylarını temizle
+        xmlData = null;
+        
         return {
           statusCode: 200,
           headers,
@@ -816,20 +826,43 @@ async function handleSync(action, event, headers) {
             debug: {
               xmlSize: xmlResponse.data.length,
               productCount: products.length,
-              xmlStructure: xmlStructure,
-              firstProductKeys: products.length > 0 ? Object.keys(products[0]) : []
+              foundPath: foundPath,
+              firstProductKeys: firstProductKeys
             }
           })
         };
         
       } catch (syncError) {
-        console.error('Sync error:', syncError);
+        console.error('Sync error:', {
+          message: syncError.message,
+          code: syncError.code,
+          status: syncError.response?.status
+        });
+        
+        let errorMessage = 'Senkronizasyon hatası: ';
+        if (syncError.code === 'ECONNABORTED' || syncError.message.includes('timeout')) {
+          errorMessage += 'XML bağlantısı zaman aşımına uğradı (10s)';
+        } else if (syncError.code === 'ENOTFOUND') {
+          errorMessage += 'XML URL\'si bulunamadı';
+        } else if (syncError.code === 'ECONNREFUSED') {
+          errorMessage += 'XML sunucusuna bağlanılamadı';
+        } else if (syncError.message.includes('Parse')) {
+          errorMessage += 'XML formatı geçersiz';
+        } else {
+          errorMessage += syncError.message;
+        }
+        
         return {
           statusCode: 500,
           headers,
           body: JSON.stringify({
             success: false,
-            message: `Senkronizasyon hatası: ${syncError.message}`
+            message: errorMessage,
+            debug: {
+              code: syncError.code,
+              status: syncError.response?.status,
+              timeout: '10 saniye'
+            }
           })
         };
       }
