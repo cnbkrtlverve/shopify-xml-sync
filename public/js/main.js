@@ -225,16 +225,31 @@ async function updateDashboard() {
     const shopifyProducts = document.getElementById('shopify-products');
 
     fetch('/api/shopify/info')
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                shopifyStatus.textContent = 'Bağlandı';
-                shopifyStatus.className = 'status-badge success';
-                shopifyName.textContent = data.name || 'N/A';
-                shopifyEmail.textContent = data.email || 'N/A';
-                shopifyProducts.textContent = data.productCount || 0;
-            } else {
-                throw new Error('Shopify bilgileri alınamadı.');
+        .then(res => {
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            }
+            return res.text(); // Önce text olarak al
+        })
+        .then(text => {
+            if (!text || text.trim() === '') {
+                throw new Error('Boş yanıt alındı');
+            }
+            try {
+                const data = JSON.parse(text);
+                if (data.success) {
+                    shopifyStatus.textContent = 'Bağlandı';
+                    shopifyStatus.className = 'status-badge success';
+                    shopifyName.textContent = data.name || 'N/A';
+                    shopifyEmail.textContent = data.email || 'N/A';
+                    shopifyProducts.textContent = data.productCount || 0;
+                } else {
+                    throw new Error(data.message || 'Shopify\'e bağlanılamadı.');
+                }
+            } catch (jsonError) {
+                console.error('JSON Parse Error:', jsonError);
+                console.log('Raw response:', text);
+                throw new Error('Geçersiz JSON yanıtı alındı');
             }
         })
         .catch(e => {
@@ -254,16 +269,31 @@ async function updateDashboard() {
     const lastChecked = document.getElementById('xml-last-checked');
 
     fetch('/api/xml/stats')
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                xmlStatus.textContent = 'Bağlandı';
-                xmlStatus.className = 'status-badge success';
-                xmlSourceUrl.textContent = data.url || 'N/A';
-                xmlProducts.textContent = data.productCount || 0;
-                lastChecked.textContent = new Date().toLocaleString();
-            } else {
-                throw new Error('XML istatistikleri alınamadı.');
+        .then(res => {
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+            }
+            return res.text(); // Önce text olarak al
+        })
+        .then(text => {
+            if (!text || text.trim() === '') {
+                throw new Error('Boş yanıt alındı');
+            }
+            try {
+                const data = JSON.parse(text);
+                if (data.success) {
+                    xmlStatus.textContent = 'Bağlandı';
+                    xmlStatus.className = 'status-badge success';
+                    xmlSourceUrl.textContent = data.url || 'N/A';
+                    xmlProducts.textContent = data.productCount || 0;
+                    lastChecked.textContent = new Date().toLocaleString();
+                } else {
+                    throw new Error(data.message || 'XML istatistikleri alınamadı.');
+                }
+            } catch (jsonError) {
+                console.error('JSON Parse Error:', jsonError);
+                console.log('Raw response:', text);
+                throw new Error('Geçersiz JSON yanıtı alındı');
             }
         })
         .catch(e => {

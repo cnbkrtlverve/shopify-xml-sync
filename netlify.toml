@@ -3,30 +3,21 @@
   functions = "netlify/functions"
   publish = "public"
 
-# XML için proxy
-[[redirects]]
-  from = "/xml-feed"
-  to = "https://stildiva.sentos.com.tr/xml-sentos-out/1"
-  status = 200
-
-# API istekleri
+# API istekleri - öncelik sırası önemli
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api/:splat"
   status = 200
 
-# SPA fallback
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
-# XML feed'i için proxy yönlendirmesi.
-# Bu kural, /xml-feed adresine gelen istekleri alıp,
-# hedef URL'den veriyi çekerek istemciye geri gönderir.
-# Bu sayede tarayıcıdaki CORS hatası atlatılmış olur.
+# XML feed'i için proxy yönlendirmesi
 [[redirects]]
   from = "/xml-feed"
   to = "https://stildiva.sentos.com.tr/xml-sentos-out/1"
   status = 200
   force = true
+
+# SPA fallback - en sonda olmalı
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

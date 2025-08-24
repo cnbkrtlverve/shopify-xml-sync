@@ -95,32 +95,49 @@ async function handleShopify(action, event, headers) { return { statusCode: 200,
     const service = segments[0];
     const action = segments[1];
 
-    console.log('API Request:', { path, service, action, method: event.httpMethod });
+    console.log('API Request:', { 
+      path, 
+      service, 
+      action, 
+      method: event.httpMethod,
+      queryParams: event.queryStringParameters 
+    });
 
+    let result;
+    
     if (service === 'config') {
-      return await handleConfig(action, event, headers);
-    }
-    if (service === 'debug') {
-      return await handleDebug(action, event, headers);
-    }
-    if (service === 'shopify') {
-      return await handleShopify(action, event, headers);
-    }
-    if (service === 'xml') {
-      return await handleXml(action, event, headers);
-    }
-    if (service === 'sync') {
-      return await handleSync(action, event, headers);
-    }
-    if (service === 'google') {
-      return await handleGoogle(action, event, headers);
+      result = await handleConfig(action, event, headers);
+    } else if (service === 'debug') {
+      result = await handleDebug(action, event, headers);
+    } else if (service === 'shopify') {
+      result = await handleShopify(action, event, headers);
+    } else if (service === 'xml') {
+      result = await handleXml(action, event, headers);
+    } else if (service === 'sync') {
+      result = await handleSync(action, event, headers);
+    } else if (service === 'google') {
+      result = await handleGoogle(action, event, headers);
+    } else {
+      result = {
+        statusCode: 404,
+        headers,
+        body: JSON.stringify({ error: 'Endpoint bulunamadı', path, service, action })
+      };
     }
 
-    return {
-      statusCode: 404,
-      headers,
-      body: JSON.stringify({ error: 'Endpoint bulunamadı' })
-    };
+    // JSON formatı kontrolü
+    if (result.body) {
+      try {
+        JSON.parse(result.body);
+      } catch (jsonError) {
+        console.error('Invalid JSON response:', result.body);
+        result.body = JSON.stringify({ error: 'Invalid JSON response', original: result.body });
+      }
+    }
+
+    console.log('API Response:', { statusCode: result.statusCode, bodyLength: result.body?.length });
+    return result;
+
   } catch (error) {
     console.error('API Main Error:', error);
     return {
@@ -144,7 +161,8 @@ async function handleShopify(action, event, headers) {
 
     console.log('Shopify ENV check:', { 
       hasStoreUrl: !!SHOPIFY_STORE_URL, 
-      hasToken: !!SHOPIFY_ADMIN_API_TOKEN 
+      hasToken: !!SHOPIFY_ADMIN_API_TOKEN,
+      storeUrl: SHOPIFY_STORE_URL?.substring(0, 20) + '...'
     });
 
     if (!SHOPIFY_STORE_URL || !SHOPIFY_ADMIN_API_TOKEN) {
@@ -167,25 +185,46 @@ async function handleShopify(action, event, headers) {
       headers: { 
         'X-Shopify-Access-Token': SHOPIFY_ADMIN_API_TOKEN,
         'Content-Type': 'application/json'
-      }
+      },
+      timeout: 15000
     });
 
     if (action === 'check') {
       try {
-        await shopifyApi.get('/shop.json');
+        console.log('Shopify check starting');
+        const response = await shopifyApi.get('/shop.json');
+        console.log('Shopify check successful:', response.status);
+        
         return {
           statusCode: 200,
           headers,
-          body: JSON.stringify({ success: true, message: 'Başarılı' })
+          body: JSON.stringify({ 
+            success: true, 
+            message: 'Başarılı',
+            debug: {
+              status: response.status,
+              shopName: response.data?.shop?.name
+            }
+          })
         };
       } catch (error) {
-        console.error('Shopify check error:', error.message);
+        console.error('Shopify check error:', {
+          message: error.message,
+          status: error.response?.status,
+          statusText: error.response?.statusText
+        });
+        
         return {
           statusCode: 200,
           headers,
           body: JSON.stringify({ 
             success: false, 
-            message: 'Bağlantı hatası: ' + error.message 
+            message: 'Bağlantı hatası: ' + error.message,
+            debug: {
+              status: error.response?.status,
+              statusText: error.response?.statusText,
+              code: error.code
+            }
           })
         };
       }
@@ -193,26 +232,47 @@ async function handleShopify(action, event, headers) {
 
     if (action === 'info') {
       try {
-        const { data: shopData } = await shopifyApi.get('/shop.json');
-        const { data: countData } = await shopifyApi.get('/products/count.json');
+        console.log('Shopify info starting');
+        
+        const [shopResponse, countResponse] = await Promise.all([
+          shopifyApi.get('/shop.json'),
+          shopifyApi.get('/products/count.json')
+        ]);
+        
+        console.log('Shopify info successful');
+        
         return {
           statusCode: 200,
           headers,
           body: JSON.stringify({
             success: true,
-            name: shopData.shop.name,
-            email: shopData.shop.email,
-            productCount: countData.count
+            name: shopResponse.data.shop.name,
+            email: shopResponse.data.shop.email,
+            productCount: countResponse.data.count,
+            debug: {
+              shopStatus: shopResponse.status,
+              countStatus: countResponse.status
+            }
           })
         };
       } catch (error) {
-        console.error('Shopify info error:', error.message);
+        console.error('Shopify info error:', {
+          message: error.message,
+          status: error.response?.status,
+          statusText: error.response?.statusText
+        });
+        
         return {
           statusCode: 200,
           headers,
           body: JSON.stringify({ 
             success: false, 
-            message: 'Shopify bilgileri alınamadı: ' + error.message 
+            message: 'Shopify bilgileri alınamadı: ' + error.message,
+            debug: {
+              status: error.response?.status,
+              statusText: error.response?.statusText,
+              code: error.code
+            }
           })
         };
       }
@@ -229,6 +289,8 @@ async function handleShopify(action, event, headers) {
       }
 
       try {
+        console.log('Shopify search starting for query:', query);
+        
         const graphqlQuery = {
           query: `
           query productSearch($query: String!) {
@@ -259,6 +321,8 @@ async function handleShopify(action, event, headers) {
         };
 
         const response = await shopifyApi.post('/graphql.json', graphqlQuery);
+        console.log('Shopify search successful');
+        
         const products = response.data.data.products.edges.map((edge) => {
           return {
             ...edge.node,
@@ -269,14 +333,29 @@ async function handleShopify(action, event, headers) {
         return {
           statusCode: 200,
           headers,
-          body: JSON.stringify({ success: true, products })
+          body: JSON.stringify({ 
+            success: true, 
+            products,
+            debug: {
+              status: response.status,
+              resultCount: products.length
+            }
+          })
         };
       } catch (error) {
-        console.error('Shopify search error:', error.message);
+        console.error('Shopify search error:', {
+          message: error.message,
+          status: error.response?.status
+        });
+        
         return {
           statusCode: 200,
           headers,
-          body: JSON.stringify({ success: false, products: [] })
+          body: JSON.stringify({ 
+            success: false, 
+            products: [],
+            message: 'Arama hatası: ' + error.message
+          })
         };
       }
     }
@@ -284,7 +363,7 @@ async function handleShopify(action, event, headers) {
     return {
       statusCode: 404,
       headers,
-      body: JSON.stringify({ error: 'Shopify action bulunamadı' })
+      body: JSON.stringify({ error: 'Shopify action bulunamadı: ' + action })
     };
 
   } catch (error) {
@@ -294,7 +373,8 @@ async function handleShopify(action, event, headers) {
       headers,
       body: JSON.stringify({ 
         error: 'Shopify handler hatası',
-        message: error.message
+        message: error.message,
+        stack: error.stack?.substring(0, 500)
       })
     };
   }
@@ -304,34 +384,75 @@ async function handleXml(action, event, headers) {
   try {
     const axios = require('axios');
     
-    const XML_FEED_URL = process.env.XML_FEED_URL;
-
-    console.log('XML ENV check:', { hasXmlUrl: !!XML_FEED_URL });
+    // XML URL'ini hem env'den hem de proxy'den kontrol et
+    let XML_FEED_URL = process.env.XML_FEED_URL;
+    
+    console.log('XML ENV check:', { 
+      hasXmlUrl: !!XML_FEED_URL,
+      xmlUrl: XML_FEED_URL?.substring(0, 50) + '...'
+    });
 
     if (!XML_FEED_URL) {
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({ success: false, message: 'XML URL eksik' })
+        body: JSON.stringify({ 
+          success: false, 
+          message: 'XML URL eksik',
+          debug: 'Environment variable XML_FEED_URL bulunamadı'
+        })
       };
     }
 
     if (action === 'check') {
       try {
-        const response = await axios.get(XML_FEED_URL, { timeout: 10000 });
+        console.log('XML check starting for:', XML_FEED_URL);
+        
+        const response = await axios.get(XML_FEED_URL, { 
+          timeout: 15000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; ShopifyXMLSync/1.0)',
+            'Accept': 'application/xml, text/xml, */*'
+          }
+        });
+        
+        console.log('XML check response:', { 
+          status: response.status, 
+          contentType: response.headers['content-type'],
+          dataLength: response.data?.length 
+        });
+        
         return {
           statusCode: 200,
           headers,
-          body: JSON.stringify({ success: true, message: 'XML bağlantısı başarılı' })
+          body: JSON.stringify({ 
+            success: true, 
+            message: 'XML bağlantısı başarılı',
+            debug: {
+              status: response.status,
+              contentType: response.headers['content-type'],
+              dataLength: response.data?.length
+            }
+          })
         };
       } catch (error) {
-        console.error('XML check error:', error.message);
+        console.error('XML check error:', {
+          message: error.message,
+          code: error.code,
+          status: error.response?.status
+        });
+        
         return {
           statusCode: 200,
           headers,
           body: JSON.stringify({ 
             success: false, 
-            message: 'XML bağlantı hatası: ' + error.message 
+            message: 'XML bağlantı hatası: ' + error.message,
+            debug: {
+              code: error.code,
+              status: error.response?.status,
+              url: XML_FEED_URL
+            }
           })
         };
       }
@@ -339,21 +460,49 @@ async function handleXml(action, event, headers) {
 
     if (action === 'stats') {
       try {
-        const response = await axios.get(XML_FEED_URL, { timeout: 15000 });
+        console.log('XML stats starting for:', XML_FEED_URL);
         
-        // xml2js require etmeye çalış, yoksa basit sayma yap
+        const response = await axios.get(XML_FEED_URL, { 
+          timeout: 20000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; ShopifyXMLSync/1.0)',
+            'Accept': 'application/xml, text/xml, */*'
+          }
+        });
+        
+        console.log('XML stats response received:', {
+          status: response.status,
+          contentType: response.headers['content-type'],
+          dataLength: response.data?.length
+        });
+        
         let productCount = 0;
+        let parseMethod = 'string';
+        
         try {
           const xml2js = require('xml2js');
-          const parsed = await xml2js.parseStringPromise(response.data);
+          const parsed = await xml2js.parseStringPromise(response.data, {
+            explicitArray: false,
+            trim: true
+          });
+          
+          console.log('XML parsed successfully');
+          
           const products = parsed.Urunler?.Urun || [];
           productCount = Array.isArray(products) ? products.length : (products ? 1 : 0);
+          parseMethod = 'xml2js';
+          
         } catch (parseError) {
           console.warn('XML parsing failed, using string count:', parseError.message);
+          
           // Basit string sayma yöntemi
-          const matches = (response.data || '').match(/<Urun/g);
+          const dataStr = String(response.data || '');
+          const matches = dataStr.match(/<Urun[^>]*>/g);
           productCount = matches ? matches.length : 0;
+          parseMethod = 'regex';
         }
+
+        console.log('XML stats completed:', { productCount, parseMethod });
 
         return {
           statusCode: 200,
@@ -361,17 +510,33 @@ async function handleXml(action, event, headers) {
           body: JSON.stringify({
             success: true,
             url: XML_FEED_URL,
-            productCount
+            productCount,
+            debug: {
+              parseMethod,
+              dataLength: response.data?.length,
+              status: response.status
+            }
           })
         };
+        
       } catch (error) {
-        console.error('XML stats error:', error.message);
+        console.error('XML stats error:', {
+          message: error.message,
+          code: error.code,
+          status: error.response?.status
+        });
+        
         return {
           statusCode: 200,
           headers,
           body: JSON.stringify({ 
             success: false, 
-            message: 'XML stats alınamadı: ' + error.message 
+            message: 'XML stats alınamadı: ' + error.message,
+            debug: {
+              code: error.code,
+              status: error.response?.status,
+              url: XML_FEED_URL
+            }
           })
         };
       }
@@ -380,7 +545,7 @@ async function handleXml(action, event, headers) {
     return {
       statusCode: 404,
       headers,
-      body: JSON.stringify({ error: 'XML action bulunamadı' })
+      body: JSON.stringify({ error: 'XML action bulunamadı: ' + action })
     };
 
   } catch (error) {
@@ -390,7 +555,8 @@ async function handleXml(action, event, headers) {
       headers,
       body: JSON.stringify({ 
         error: 'XML handler hatası',
-        message: error.message
+        message: error.message,
+        stack: error.stack?.substring(0, 500)
       })
     };
   }
