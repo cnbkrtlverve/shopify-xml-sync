@@ -576,8 +576,8 @@ exports.handler = async (event, context) => {
           };
         }
         
-        // İlk 20 ürünü işle (test için)
-        const productsToProcess = products.slice(0, 20);
+        // TÜM ürünleri işle (sınır yok)
+        const productsToProcess = products;
         console.log(`${productsToProcess.length} ürün işlenecek`);
         
         let createdCount = 0;
@@ -585,8 +585,8 @@ exports.handler = async (event, context) => {
         let errorCount = 0;
         const processedProducts = [];
         
-        // Batch işleme (50'li gruplar halinde)
-        const batchSize = 50;
+        // Batch işleme (100'lü gruplar halinde - daha hızlı)
+        const batchSize = 100;
         const totalBatches = Math.ceil(productsToProcess.length / batchSize);
         
         for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
@@ -594,7 +594,7 @@ exports.handler = async (event, context) => {
           const batchEnd = Math.min(batchStart + batchSize, productsToProcess.length);
           const batchProducts = productsToProcess.slice(batchStart, batchEnd);
           
-          console.log(`Batch ${batchIndex + 1}/${totalBatches}: ${batchProducts.length} ürün işleniyor`);
+          console.log(`Batch ${batchIndex + 1}/${totalBatches}: ${batchProducts.length} ürün işleniyor (Toplam: ${createdCount + updatedCount + errorCount}/${productsToProcess.length})`);
           
           for (let i = 0; i < batchProducts.length; i++) {
             const product = batchProducts[i];
@@ -772,10 +772,10 @@ exports.handler = async (event, context) => {
               }
               
               // Rate limiting (Shopify API limits)
-              if ((batchStart + i + 1) % 10 === 0) {
-                await new Promise(resolve => setTimeout(resolve, 500)); // Her 10 üründe 500ms bekle
+              if ((batchStart + i + 1) % 20 === 0) {
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Her 20 üründe 1 saniye bekle
               } else {
-                await new Promise(resolve => setTimeout(resolve, 50)); // Normal bekleme
+                await new Promise(resolve => setTimeout(resolve, 30)); // Normal bekleme
               }
               
             } catch (productError) {
@@ -786,8 +786,8 @@ exports.handler = async (event, context) => {
           
           // Batch arası bekleme
           if (batchIndex < totalBatches - 1) {
-            console.log(`Batch ${batchIndex + 1} tamamlandı, 2 saniye bekleniyor...`);
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            console.log(`Batch ${batchIndex + 1} tamamlandı, 1 saniye bekleniyor...`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
         }
         
@@ -1159,8 +1159,8 @@ exports.handler = async (event, context) => {
           };
         }
 
-        // Maksimum 10 ürün sil (timeout'u önlemek için)
-        const productsToDelete = testProducts.slice(0, 10);
+        // Maksimum 50 ürün sil (daha hızlı temizlik)
+        const productsToDelete = testProducts.slice(0, 50);
         let deletedCount = 0;
         const deletedProducts = [];
         

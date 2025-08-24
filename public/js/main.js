@@ -610,9 +610,9 @@ function handleStartSync() {
     const syncController = new AbortController();
     const syncTimeoutId = setTimeout(() => {
         syncController.abort();
-        addLog('Senkronizasyon zaman aşımına uğradı (5 dakika)', 'error');
-        addLog('💡 Çok fazla ürün var, işlem devam ediyor olabilir', 'info');
-    }, 300000); // 5 dakika timeout
+        addLog('Senkronizasyon zaman aşımına uğradı (15 dakika)', 'error');
+        addLog('💡 1623 ürün işleniyor, çok uzun sürüyor', 'info');
+    }, 900000); // 15 dakika timeout
 
     fetch('/.netlify/functions/api/sync/start', {
         method: 'POST',
