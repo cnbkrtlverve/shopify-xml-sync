@@ -175,9 +175,20 @@ function handleSaveConfig() {
 }
 
 async function handleTestShopify() {
+    const currentConfig = window.configService.getConfig();
+    
+    const apiHeaders = {
+        'Content-Type': 'application/json'
+    };
+    
+    if (currentConfig.shopifyUrl) apiHeaders['X-Shopify-Store-Url'] = currentConfig.shopifyUrl;
+    if (currentConfig.shopifyAdminToken) apiHeaders['X-Shopify-Admin-Token'] = currentConfig.shopifyAdminToken;
+
     showConfigMessage('Shopify bağlantısı test ediliyor...', 'info');
     try {
-        const result = await fetch('/api/shopify/check');
+        const result = await fetch('/api/shopify/check', {
+            headers: apiHeaders
+        });
         const data = await result.json();
         if (data.success) {
             showConfigMessage('Shopify bağlantısı başarılı!', 'success');
@@ -190,9 +201,19 @@ async function handleTestShopify() {
 }
 
 async function handleTestXML() {
+    const currentConfig = window.configService.getConfig();
+    
+    const apiHeaders = {
+        'Content-Type': 'application/json'
+    };
+    
+    if (currentConfig.xmlUrl) apiHeaders['X-XML-Feed-Url'] = currentConfig.xmlUrl;
+
     showConfigMessage('XML bağlantısı test ediliyor...', 'info');
     try {
-        const result = await fetch('/api/xml/check');
+        const result = await fetch('/api/xml/check', {
+            headers: apiHeaders
+        });
         const data = await result.json();
         if (data.success) {
             showConfigMessage('XML bağlantısı başarılı!', 'success');
@@ -224,7 +245,18 @@ async function updateDashboard() {
     const shopifyEmail = document.getElementById('shopify-email');
     const shopifyProducts = document.getElementById('shopify-products');
 
-    fetch('/api/shopify/info')
+    // API başlıklarını hazırla
+    const apiHeaders = {
+        'Content-Type': 'application/json'
+    };
+    
+    if (config.shopifyUrl) apiHeaders['X-Shopify-Store-Url'] = config.shopifyUrl;
+    if (config.shopifyAdminToken) apiHeaders['X-Shopify-Admin-Token'] = config.shopifyAdminToken;
+    if (config.xmlUrl) apiHeaders['X-XML-Feed-Url'] = config.xmlUrl;
+
+    fetch('/api/shopify/info', {
+        headers: apiHeaders
+    })
         .then(res => {
             if (!res.ok) {
                 throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -268,7 +300,9 @@ async function updateDashboard() {
     const xmlProducts = document.getElementById('xml-products');
     const lastChecked = document.getElementById('xml-last-checked');
 
-    fetch('/api/xml/stats')
+    fetch('/api/xml/stats', {
+        headers: apiHeaders
+    })
         .then(res => {
             if (!res.ok) {
                 throw new Error(`HTTP ${res.status}: ${res.statusText}`);

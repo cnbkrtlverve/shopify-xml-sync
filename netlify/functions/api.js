@@ -156,13 +156,15 @@ async function handleShopify(action, event, headers) {
   try {
     const axios = require('axios');
     
-    const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL;
-    const SHOPIFY_ADMIN_API_TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN;
+    // Önce environment variables'dan, sonra header'lardan al
+    let SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || event.headers['x-shopify-store-url'];
+    let SHOPIFY_ADMIN_API_TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN || event.headers['x-shopify-admin-token'];
 
-    console.log('Shopify ENV check:', { 
+    console.log('Shopify ENV + Header check:', { 
       hasStoreUrl: !!SHOPIFY_STORE_URL, 
       hasToken: !!SHOPIFY_ADMIN_API_TOKEN,
-      storeUrl: SHOPIFY_STORE_URL?.substring(0, 20) + '...'
+      storeUrl: SHOPIFY_STORE_URL?.substring(0, 20) + '...',
+      source: process.env.SHOPIFY_STORE_URL ? 'env' : 'header'
     });
 
     if (!SHOPIFY_STORE_URL || !SHOPIFY_ADMIN_API_TOKEN) {
@@ -174,7 +176,15 @@ async function handleShopify(action, event, headers) {
           message: 'Shopify ayarları eksik',
           debug: {
             SHOPIFY_STORE_URL: !!SHOPIFY_STORE_URL,
-            SHOPIFY_ADMIN_API_TOKEN: !!SHOPIFY_ADMIN_API_TOKEN
+            SHOPIFY_ADMIN_API_TOKEN: !!SHOPIFY_ADMIN_API_TOKEN,
+            envVars: {
+              SHOPIFY_STORE_URL: !!process.env.SHOPIFY_STORE_URL,
+              SHOPIFY_ADMIN_API_TOKEN: !!process.env.SHOPIFY_ADMIN_API_TOKEN
+            },
+            headers: {
+              storeUrl: !!event.headers['x-shopify-store-url'],
+              token: !!event.headers['x-shopify-admin-token']
+            }
           }
         })
       };
@@ -384,12 +394,13 @@ async function handleXml(action, event, headers) {
   try {
     const axios = require('axios');
     
-    // XML URL'ini hem env'den hem de proxy'den kontrol et
-    let XML_FEED_URL = process.env.XML_FEED_URL;
+    // Önce environment variables'dan, sonra header'lardan al
+    let XML_FEED_URL = process.env.XML_FEED_URL || event.headers['x-xml-feed-url'];
     
-    console.log('XML ENV check:', { 
+    console.log('XML ENV + Header check:', { 
       hasXmlUrl: !!XML_FEED_URL,
-      xmlUrl: XML_FEED_URL?.substring(0, 50) + '...'
+      xmlUrl: XML_FEED_URL?.substring(0, 50) + '...',
+      source: process.env.XML_FEED_URL ? 'env' : 'header'
     });
 
     if (!XML_FEED_URL) {
@@ -399,7 +410,11 @@ async function handleXml(action, event, headers) {
         body: JSON.stringify({ 
           success: false, 
           message: 'XML URL eksik',
-          debug: 'Environment variable XML_FEED_URL bulunamadı'
+          debug: {
+            envVar: !!process.env.XML_FEED_URL,
+            header: !!event.headers['x-xml-feed-url'],
+            message: 'XML URL hem environment variable\'da hem header\'da bulunamadı'
+          }
         })
       };
     }
