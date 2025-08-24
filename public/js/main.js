@@ -629,29 +629,24 @@ function handleStartSync() {
         if (result.success) {
             addLog('Senkronizasyon başarılı!', 'success');
             addLog(`İşlenen ürün sayısı: ${result.processedCount || 0}`, 'info');
+            addLog(`Oluşturulan ürün: ${result.createdCount || 0}`, 'success');
+            addLog(`Güncellenen ürün: ${result.updatedCount || 0}`, 'info');
+            
+            if (result.errorCount > 0) {
+                addLog(`Hatalı ürün: ${result.errorCount}`, 'warning');
+            }
+            
             if (result.debug) {
-                addLog(`XML boyutu: ${result.debug.xmlSize} byte`, 'info');
-                addLog(`Bulunan ürün: ${result.debug.productCount}`, 'info');
-                addLog(`Ürün yolu: ${result.debug.foundPath}`, 'info');
+                addLog(`XML'den toplam ürün: ${result.debug.totalXmlProducts}`, 'info');
+                addLog(`Shopify URL: ${result.debug.shopifyUrl}`, 'info');
+                addLog(`Bulunan yol: ${result.debug.foundPath}`, 'info');
                 
-                if (result.debug.productAnalysis) {
-                    const analysis = result.debug.productAnalysis;
-                    addLog(`Ürün alanları: ${analysis.keys.join(', ')}`, 'info');
-                    
-                    const features = [];
-                    if (analysis.hasId) features.push('ID');
-                    if (analysis.hasName) features.push('İsim');
-                    if (analysis.hasPrice) features.push('Fiyat');
-                    if (analysis.hasDescription) features.push('Açıklama');
-                    if (analysis.hasCategory) features.push('Kategori');
-                    if (analysis.hasStock) features.push('Stok');
-                    if (analysis.hasImage) features.push('Resim');
-                    
-                    if (features.length > 0) {
-                        addLog(`Tespit edilen özellikler: ${features.join(', ')}`, 'success');
-                    } else {
-                        addLog('Standart ürün özellikleri tespit edilemedi', 'warning');
-                    }
+                if (result.debug.testProductKeys) {
+                    addLog(`Test ürün alanları: ${result.debug.testProductKeys.slice(0, 5).join(', ')}`, 'info');
+                }
+                
+                if (result.debug.shopifyProductId) {
+                    addLog(`Shopify ürün ID: ${result.debug.shopifyProductId}`, 'success');
                 }
             }
             updateDashboard(); // Dashboard'u güncelle
@@ -659,15 +654,14 @@ function handleStartSync() {
             addLog(`Senkronizasyon hatası: ${result.message}`, 'error');
             if (result.debug) {
                 console.log('Sync debug bilgisi:', result.debug);
-                if (result.debug.rootKeys) {
-                    addLog(`XML root anahtarları: ${result.debug.rootKeys.join(', ')}`, 'info');
+                if (result.debug.shopifyError) {
+                    addLog('Shopify API hatası console\'da detaylandırıldı', 'error');
+                    console.error('Shopify Error:', result.debug.shopifyError);
                 }
-                if (result.debug.xmlPreview) {
-                    addLog('XML önizleme console\'da görüntülendi', 'info');
-                    console.log('XML Preview:', result.debug.xmlPreview);
-                }
-                if (result.debug.checkedPaths) {
-                    addLog(`Kontrol edilen yollar: ${result.debug.checkedPaths.join(', ')}`, 'info');
+                if (result.debug.testProduct) {
+                    addLog(`Test ürün: ${result.debug.testProduct.title}`, 'info');
+                    addLog(`SKU: ${result.debug.testProduct.sku}`, 'info');
+                    addLog(`Fiyat: ${result.debug.testProduct.price}`, 'info');
                 }
             }
         }

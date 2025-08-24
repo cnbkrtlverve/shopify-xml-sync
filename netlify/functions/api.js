@@ -961,58 +961,102 @@ async function handleSync(action, event, headers) {
         
         console.log('Bulunan ürün sayısı:', products.length);
         
-        // İlk ürünün yapısını analiz et
-        let productAnalysis = {};
-        if (products.length > 0) {
-          const firstProduct = products[0];
-          productAnalysis = {
-            keys: Object.keys(firstProduct).slice(0, 15), // İlk 15 anahtar
-            hasId: !!(firstProduct.id || firstProduct.ID || firstProduct.productId || firstProduct.kod || firstProduct.code),
-            hasName: !!(firstProduct.name || firstProduct.title || firstProduct.baslik || firstProduct.ad || firstProduct.urun_adi),
-            hasPrice: !!(firstProduct.price || firstProduct.fiyat || firstProduct.satis_fiyati || firstProduct.cost),
-            hasDescription: !!(firstProduct.description || firstProduct.aciklama || firstProduct.tanim),
-            hasCategory: !!(firstProduct.category || firstProduct.kategori || firstProduct.category_name),
-            hasStock: !!(firstProduct.stock || firstProduct.stok || firstProduct.quantity || firstProduct.miktar),
-            hasImage: !!(firstProduct.image || firstProduct.resim || firstProduct.foto || firstProduct.picture)
-          };
-          
-          console.log('Ürün analizi:', productAnalysis);
-          
-          // İlk ürünün örnek değerlerini al
-          const sampleValues = {};
-          Object.keys(firstProduct).slice(0, 5).forEach(key => {
-            const value = firstProduct[key];
-            if (typeof value === 'string' || typeof value === 'number') {
-              sampleValues[key] = String(value).substring(0, 50);
-            } else if (typeof value === 'object') {
-              sampleValues[key] = `[Object: ${Object.keys(value).join(', ')}]`;
-            } else {
-              sampleValues[key] = typeof value;
-            }
+        // GERÇEK SHOPIFY SENKRONIZASYONU
+        
+        // Shopify URL formatını düzelt
+        let shopUrl = SHOPIFY_STORE_URL;
+        if (!shopUrl.includes('.myshopify.com')) {
+          shopUrl = shopUrl.replace('https://', '').replace('http://', '');
+          shopUrl = `https://${shopUrl}.myshopify.com`;
+        }
+        if (!shopUrl.startsWith('https://')) {
+          shopUrl = `https://${shopUrl}`;
+        }
+
+        console.log('Shopify store URL:', shopUrl);
+        console.log('Sync options:', options);
+
+        // Test için ilk ürünü Shopify'a gönder
+        const testProduct = products[0];
+        console.log('Test ürünü:', Object.keys(testProduct));
+        
+        // Basit Shopify ürün formatı
+        const title = testProduct.name || testProduct.title || testProduct.ad || testProduct.UrunAdi || 'Test Ürün';
+        const price = testProduct.price || testProduct.fiyat || testProduct.SatisFiyati || '10.00';
+        const sku = testProduct.sku || testProduct.kod || testProduct.UrunKodu || `test-${Date.now()}`;
+        
+        const shopifyProduct = {
+          title: title.substring(0, 255),
+          body_html: testProduct.description || testProduct.aciklama || 'Test açıklama',
+          vendor: 'XML Import',
+          product_type: 'Genel',
+          status: 'active',
+          variants: [{
+            title: 'Default',
+            price: String(price).replace(',', '.'),
+            sku: sku,
+            inventory_quantity: parseInt(testProduct.stock || testProduct.stok || '1'),
+            inventory_management: 'shopify'
+          }]
+        };
+        
+        console.log('Shopify ürün formatı:', shopifyProduct);
+        
+        try {
+          // Shopify'a test ürünü gönder
+          const createUrl = `${shopUrl}/admin/api/2024-07/products.json`;
+          const response = await axios.post(createUrl, {
+            product: shopifyProduct
+          }, {
+            headers: {
+              'X-Shopify-Access-Token': SHOPIFY_ADMIN_API_TOKEN,
+              'Content-Type': 'application/json'
+            },
+            timeout: 15000
           });
           
-          console.log('İlk ürün örnek değerleri:', sampleValues);
+          console.log('Shopify yanıtı:', response.status);
+          
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({
+              success: true,
+              message: `Test ürünü başarıyla oluşturuldu: ${title}`,
+              processedCount: 1,
+              createdCount: 1,
+              options: options,
+              debug: {
+                xmlSize: xmlResponse.data.length,
+                totalXmlProducts: products.length,
+                foundPath: foundPath,
+                shopifyUrl: shopUrl,
+                testProductKeys: Object.keys(testProduct),
+                shopifyProductId: response.data.product?.id
+              }
+            })
+          });
+          
+        } catch (shopifyError) {
+          console.error('Shopify API hatası:', shopifyError.response?.data || shopifyError.message);
+          
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({
+              success: false,
+              message: 'Shopify API hatası: ' + (shopifyError.response?.data?.errors || shopifyError.message),
+              debug: {
+                shopifyError: shopifyError.response?.data,
+                testProduct: {
+                  title: title,
+                  price: price,
+                  sku: sku
+                }
+              }
+            })
+          });
         }
-        
-        // Memory'yi korumak için ürün detaylarını temizle
-        xmlData = null;
-        
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({
-            success: true,
-            message: `Senkronizasyon başarıyla tamamlandı - ${products.length} ürün işlendi`,
-            processedCount: products.length,
-            options: options,
-            debug: {
-              xmlSize: xmlResponse.data.length,
-              productCount: products.length,
-              foundPath: foundPath,
-              productAnalysis: productAnalysis
-            }
-          })
-        };
         
       } catch (syncError) {
         console.error('Sync error:', {
