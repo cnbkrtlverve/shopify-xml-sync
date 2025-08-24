@@ -464,17 +464,167 @@ exports.handler = async (event, context) => {
         };
 
       } catch (syncError) {
-        console.error('Sync hatası:', syncError.message);
+        console.error('Sync hatası:', {
+          message: syncError.message,
+          status: syncError.response?.status,
+          statusText: syncError.response?.statusText,
+          data: syncError.response?.data,
+          url: syncError.config?.url
+        });
+        
+        let errorMessage = 'Senkronizasyon hatası: ';
+        let errorDetails = {};
+        
+        if (syncError.response) {
+          // HTTP yanıt hatası
+          const status = syncError.response.status;
+          const data = syncError.response.data;
+          
+          if (status === 401) {
+            errorMessage += 'Geçersiz Shopify token. Admin API token\'ınızı kontrol edin.';
+            errorDetails = {
+              issue: 'authentication',
+              suggestion: 'Shopify Admin API token\'ınızı yeniden kontrol edin'
+            };
+          } else if (status === 403) {
+            errorMessage += 'Shopify API yetkisi yok. Token\'ın product write yetkisi olduğundan emin olun.';
+            errorDetails = {
+              issue: 'authorization', 
+              suggestion: 'Token\'ın "write_products" yetkisine sahip olduğunu kontrol edin'
+            };
+          } else if (status === 404) {
+            errorMessage += 'Shopify store bulunamadı. Store URL\'ini kontrol edin.';
+            errorDetails = {
+              issue: 'store_not_found',
+              suggestion: 'Store URL formatını kontrol edin: https://yourstore.myshopify.com'
+            };
+          } else if (status === 422) {
+            errorMessage += 'Shopify veri doğrulama hatası: ' + JSON.stringify(data?.errors || data);
+            errorDetails = {
+              issue: 'validation_error',
+              errors: data?.errors || data
+            };
+          } else {
+            errorMessage += `HTTP ${status}: ${data?.errors || data?.message || syncError.message}`;
+            errorDetails = {
+              issue: 'http_error',
+              status: status,
+              response: data
+            };
+          }
+        } else if (syncError.code === 'ENOTFOUND') {
+          errorMessage += 'Shopify store\'a erişim yok. Store URL\'ini kontrol edin.';
+          errorDetails = {
+            issue: 'dns_error',
+            suggestion: 'Store URL\'in doğru olduğunu ve .myshopify.com uzantısı olduğunu kontrol edin'
+          };
+        } else if (syncError.code === 'ECONNABORTED') {
+          errorMessage += 'Bağlantı zaman aşımı. Tekrar deneyin.';
+          errorDetails = {
+            issue: 'timeout',
+            suggestion: 'İnternet bağlantınızı kontrol edin ve tekrar deneyin'
+          };
+        } else {
+          errorMessage += syncError.message;
+          errorDetails = {
+            issue: 'unknown',
+            originalError: syncError.message
+          };
+        }
         
         return {
           statusCode: 400,
           headers,
           body: JSON.stringify({
             success: false,
-            message: 'Senkronizasyon hatası: ' + syncError.message,
+            message: errorMessage,
             debug: {
               error: syncError.response?.data || syncError.message,
-              status: syncError.response?.status
+              status: syncError.response?.status,
+              errorType: errorDetails.issue,
+              suggestion: errorDetails.suggestion,
+              fullError: errorDetails
+            }
+          })
+        };
+      }
+    }
+
+    // Shopify connection test endpoint
+    if (path.includes('/shopify/test')) {
+      const config = global.appConfig || {};
+      const SHOPIFY_STORE_URL = event.headers['x-shopify-store-url'] || 
+                               event.headers['X-Shopify-Store-Url'] ||
+                               config.shopifyUrl;
+      const SHOPIFY_ADMIN_API_TOKEN = event.headers['x-shopify-admin-token'] || 
+                                     event.headers['X-Shopify-Admin-Token'] ||
+                                     config.shopifyAdminToken;
+
+      if (!SHOPIFY_STORE_URL || !SHOPIFY_ADMIN_API_TOKEN) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            message: 'Shopify test için store URL ve token gerekli'
+          })
+        };
+      }
+
+      try {
+        console.log('Shopify bağlantı testi başlatılıyor...');
+        
+        // Shopify shop endpoint'ini test et
+        const shopUrl = SHOPIFY_STORE_URL.replace(/\/$/, '');
+        const testUrl = `${shopUrl}/admin/api/2024-07/shop.json`;
+        
+        console.log('Test URL:', testUrl);
+        
+        const response = await axios.get(testUrl, {
+          headers: {
+            'X-Shopify-Access-Token': SHOPIFY_ADMIN_API_TOKEN,
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        });
+
+        console.log('Shopify test başarılı:', response.status);
+
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            success: true,
+            message: 'Shopify bağlantısı başarılı',
+            shop: {
+              name: response.data.shop?.name || 'Bilinmeyen',
+              domain: response.data.shop?.domain || shopUrl,
+              email: response.data.shop?.email || 'Bilinmeyen',
+              plan: response.data.shop?.plan_name || 'Bilinmeyen'
+            },
+            debug: {
+              storeUrl: shopUrl,
+              hasToken: !!SHOPIFY_ADMIN_API_TOKEN,
+              responseStatus: response.status
+            }
+          })
+        };
+
+      } catch (shopifyError) {
+        console.error('Shopify test hatası:', shopifyError.response?.data || shopifyError.message);
+        
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            message: 'Shopify bağlantı hatası: ' + (shopifyError.response?.data?.errors || shopifyError.message),
+            debug: {
+              status: shopifyError.response?.status,
+              statusText: shopifyError.response?.statusText,
+              error: shopifyError.response?.data,
+              url: shopifyError.config?.url,
+              headers: shopifyError.config?.headers ? Object.keys(shopifyError.config.headers) : []
             }
           })
         };
