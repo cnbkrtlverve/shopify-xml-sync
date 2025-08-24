@@ -10,16 +10,43 @@ class XMLService {
         }
         
         try {
-            // CORS proxy kullanarak XML'i getir
-            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(window.appConfig.xmlFeedUrl)}`;
-            const response = await fetch(proxyUrl);
+            // Birden fazla CORS proxy deneyeceğiz
+            const proxies = [
+                `https://api.allorigins.win/get?url=${encodeURIComponent(window.appConfig.xmlFeedUrl)}`,
+                `https://corsproxy.io/?${encodeURIComponent(window.appConfig.xmlFeedUrl)}`,
+                `https://cors-anywhere.herokuapp.com/${window.appConfig.xmlFeedUrl}`
+            ];
             
-            if (!response.ok) {
-                throw new Error(`HTTP Error: ${response.status}`);
+            let lastError;
+            
+            for (const proxyUrl of proxies) {
+                try {
+                    console.log(`Proxy deneniyor: ${proxyUrl}`);
+                    const response = await fetch(proxyUrl);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP Error: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    // AllOrigins formatında mı kontrol et
+                    if (data.contents) {
+                        return data.contents;
+                    }
+                    
+                    // Doğrudan XML string olarak dön
+                    return data;
+                    
+                } catch (error) {
+                    console.warn(`Proxy başarısız: ${proxyUrl}`, error);
+                    lastError = error;
+                    continue;
+                }
             }
             
-            const data = await response.json();
-            return data.contents;
+            throw lastError || new Error('Tüm proxy servisleri başarısız');
+            
         } catch (error) {
             console.error('XML Fetch Error:', error);
             throw new Error(`XML verisi alınamadı: ${error.message}`);

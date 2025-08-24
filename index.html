@@ -382,13 +382,19 @@
                 
                 <div class="config-section">
                     <h3>Shopify Ayarları</h3>
-                    <input type="text" id="shopify-store-url" class="config-input" placeholder="c1grp2-yr.myshopify.com">
-                    <input type="text" id="shopify-token" class="config-input" placeholder="Shopify Admin API Token">
+                    <input type="text" id="shopify-store-url" class="config-input" placeholder="c1grp2-yr.myshopify.com (sadece domain)">
+                    <input type="password" id="shopify-token" class="config-input" placeholder="shpat_... ile başlayan Admin API Token">
+                    <button id="test-shopify" style="background-color: #4299e1; margin-top: 0.5rem;">Shopify Bağlantısını Test Et</button>
                 </div>
                 
                 <div class="config-section">
                     <h3>XML Feed Ayarları</h3>
-                    <input type="text" id="xml-feed-url" class="config-input" placeholder="XML Feed URL">
+                    <input type="text" id="xml-feed-url" class="config-input" placeholder="https:// ile başlayan tam XML URL">
+                    <button id="test-xml" style="background-color: #4299e1; margin-top: 0.5rem;">XML Bağlantısını Test Et</button>
+                </div>
+                
+                <div id="config-status" style="margin: 1rem 0; padding: 1rem; border-radius: 5px; display: none;">
+                    <div id="config-message"></div>
                 </div>
                 
                 <button id="save-config" class="save-config-btn">Ayarları Kaydet</button>

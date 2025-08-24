@@ -28,6 +28,8 @@ function setupEventListeners() {
     
     // Config
     document.getElementById('save-config').addEventListener('click', handleSaveConfig);
+    document.getElementById('test-shopify').addEventListener('click', handleTestShopify);
+    document.getElementById('test-xml').addEventListener('click', handleTestXML);
     
     // Setup log callback for sync service
     window.syncService.setLogCallback(addLog);
@@ -132,13 +134,115 @@ function handleSaveConfig() {
     const xmlFeedUrl = document.getElementById('xml-feed-url').value;
     
     if (!shopifyStoreUrl || !shopifyToken || !xmlFeedUrl) {
-        addLog('Lütfen tüm alanları doldurun!', 'error');
+        showConfigMessage('Lütfen tüm alanları doldurun!', 'error');
+        return;
+    }
+    
+    // URL formatını kontrol et
+    if (!shopifyStoreUrl.includes('.myshopify.com')) {
+        showConfigMessage('Shopify Store URL formatı hatalı! Örnek: store-name.myshopify.com', 'error');
+        return;
+    }
+    
+    if (!shopifyToken.startsWith('shpat_')) {
+        showConfigMessage('Shopify Token formatı hatalı! shpat_ ile başlamalı.', 'error');
+        return;
+    }
+    
+    if (!xmlFeedUrl.startsWith('http')) {
+        showConfigMessage('XML URL formatı hatalı! http:// veya https:// ile başlamalı.', 'error');
         return;
     }
     
     window.appConfig.saveConfig(shopifyStoreUrl, shopifyToken, xmlFeedUrl);
-    addLog('Ayarlar kaydedildi!', 'success');
+    showConfigMessage('Ayarlar kaydedildi!', 'success');
     updateDashboard();
+}
+
+async function handleTestShopify() {
+    const shopifyStoreUrl = document.getElementById('shopify-store-url').value;
+    const shopifyToken = document.getElementById('shopify-token').value;
+    
+    if (!shopifyStoreUrl || !shopifyToken) {
+        showConfigMessage('Lütfen Shopify ayarlarını doldurun!', 'error');
+        return;
+    }
+    
+    showConfigMessage('Shopify bağlantısı test ediliyor...', 'info');
+    
+    // Geçici olarak ayarları güncelle
+    const tempConfig = new Config();
+    tempConfig.saveConfig(shopifyStoreUrl, shopifyToken, window.appConfig.xmlFeedUrl);
+    
+    try {
+        const tempShopify = new ShopifyService();
+        const result = await tempShopify.checkConnection();
+        
+        if (result.success) {
+            showConfigMessage('✅ Shopify bağlantısı başarılı!', 'success');
+        } else {
+            showConfigMessage('❌ Shopify bağlantı hatası: ' + result.message, 'error');
+        }
+    } catch (error) {
+        showConfigMessage('❌ Shopify bağlantı hatası: ' + error.message, 'error');
+    }
+}
+
+async function handleTestXML() {
+    const xmlFeedUrl = document.getElementById('xml-feed-url').value;
+    
+    if (!xmlFeedUrl) {
+        showConfigMessage('Lütfen XML Feed URL\'sini doldurun!', 'error');
+        return;
+    }
+    
+    showConfigMessage('XML bağlantısı test ediliyor...', 'info');
+    
+    // Geçici olarak ayarları güncelle
+    const tempConfig = new Config();
+    tempConfig.saveConfig(window.appConfig.shopifyStoreUrl, window.appConfig.shopifyToken, xmlFeedUrl);
+    
+    try {
+        const tempXML = new XMLService();
+        const result = await tempXML.checkConnection();
+        
+        if (result.success) {
+            showConfigMessage('✅ XML bağlantısı başarılı!', 'success');
+        } else {
+            showConfigMessage('❌ XML bağlantı hatası: ' + result.message, 'error');
+        }
+    } catch (error) {
+        showConfigMessage('❌ XML bağlantı hatası: ' + error.message, 'error');
+    }
+}
+
+function showConfigMessage(message, type) {
+    const statusDiv = document.getElementById('config-status');
+    const messageDiv = document.getElementById('config-message');
+    
+    statusDiv.style.display = 'block';
+    messageDiv.textContent = message;
+    
+    // Renkleri ayarla
+    switch(type) {
+        case 'success':
+            statusDiv.style.backgroundColor = '#d4edda';
+            statusDiv.style.color = '#155724';
+            statusDiv.style.borderColor = '#c3e6cb';
+            break;
+        case 'error':
+            statusDiv.style.backgroundColor = '#f8d7da';
+            statusDiv.style.color = '#721c24';
+            statusDiv.style.borderColor = '#f5c6cb';
+            break;
+        case 'info':
+            statusDiv.style.backgroundColor = '#d1ecf1';
+            statusDiv.style.color = '#0c5460';
+            statusDiv.style.borderColor = '#bee5eb';
+            break;
+    }
+    
+    statusDiv.style.border = '1px solid';
 }
 
 function loadConfigToUI() {
@@ -171,6 +275,9 @@ async function updateShopifyStatus() {
     if (!window.appConfig.isConfigured()) {
         statusEl.textContent = 'Yapılandırılmamış';
         statusEl.className = 'status error';
+        nameEl.textContent = 'Ayarlar sekmesinden yapılandırın';
+        emailEl.textContent = 'N/A';
+        productsEl.textContent = 'N/A';
         return;
     }
     
@@ -178,13 +285,14 @@ async function updateShopifyStatus() {
         statusEl.textContent = 'Kontrol ediliyor...';
         statusEl.className = 'status';
         
-        const [connectionResult, shopInfo, productCount] = await Promise.all([
-            window.shopifyService.checkConnection(),
-            window.shopifyService.getShopInfo(),
-            window.shopifyService.getProductCount()
-        ]);
+        const connectionResult = await window.shopifyService.checkConnection();
         
         if (connectionResult.success) {
+            const [shopInfo, productCount] = await Promise.all([
+                window.shopifyService.getShopInfo(),
+                window.shopifyService.getProductCount()
+            ]);
+            
             statusEl.textContent = 'Bağlı';
             statusEl.className = 'status success';
             nameEl.textContent = shopInfo.name || 'N/A';
@@ -193,13 +301,17 @@ async function updateShopifyStatus() {
         } else {
             statusEl.textContent = 'Bağlantı Hatası';
             statusEl.className = 'status error';
-            nameEl.textContent = 'N/A';
+            nameEl.textContent = 'API anahtarını kontrol edin';
             emailEl.textContent = 'N/A';
             productsEl.textContent = 'N/A';
         }
     } catch (error) {
         statusEl.textContent = 'Hata';
         statusEl.className = 'status error';
+        nameEl.textContent = error.message;
+        emailEl.textContent = 'N/A';
+        productsEl.textContent = 'N/A';
+        console.error('Shopify status update error:', error);
     }
 }
 
@@ -212,6 +324,9 @@ async function updateXMLStatus() {
     if (!window.appConfig.xmlFeedUrl) {
         statusEl.textContent = 'Yapılandırılmamış';
         statusEl.className = 'status error';
+        urlEl.textContent = 'Ayarlar sekmesinden URL girin';
+        productsEl.textContent = 'N/A';
+        variantsEl.textContent = 'N/A';
         return;
     }
     
@@ -231,12 +346,16 @@ async function updateXMLStatus() {
             statusEl.textContent = 'Ulaşılamıyor';
             statusEl.className = 'status error';
             urlEl.textContent = stats.url;
-            productsEl.textContent = 'N/A';
+            productsEl.textContent = stats.error || 'Bağlantı hatası';
             variantsEl.textContent = 'N/A';
         }
     } catch (error) {
         statusEl.textContent = 'Hata';
         statusEl.className = 'status error';
+        urlEl.textContent = error.message;
+        productsEl.textContent = 'N/A';
+        variantsEl.textContent = 'N/A';
+        console.error('XML status update error:', error);
     }
 }
 

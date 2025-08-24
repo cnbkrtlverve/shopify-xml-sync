@@ -12,8 +12,7 @@ class ShopifyService {
         const url = `${window.appConfig.getShopifyApiUrl()}${endpoint}`;
         const options = {
             method: method,
-            headers: window.appConfig.getShopifyHeaders(),
-            mode: 'cors'
+            headers: window.appConfig.getShopifyHeaders()
         };
         
         if (data && method !== 'GET') {
@@ -30,6 +29,10 @@ class ShopifyService {
             return await response.json();
         } catch (error) {
             console.error('Shopify API Request Failed:', error);
+            // CORS hatası durumunda daha anlamlı mesaj
+            if (error.message.includes('CORS') || error.message.includes('fetch')) {
+                throw new Error('CORS hatası: Shopify API\'ye doğrudan erişim engellenmiş. Lütfen bir CORS proxy kullanın.');
+            }
             throw error;
         }
     }
