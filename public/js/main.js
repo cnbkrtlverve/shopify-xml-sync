@@ -103,6 +103,7 @@ function setupEventListeners() {
     
     // Sync Page
     document.getElementById('start-sync-btn').addEventListener('click', handleStartSync);
+    document.getElementById('clean-test-btn').addEventListener('click', handleCleanTestProducts);
 
     // Google Sheets Page
     document.getElementById('google-auth-btn').addEventListener('click', handleGoogleAuth);
@@ -627,19 +628,29 @@ function handleStartSync() {
     })
     .then(result => {
         if (result.success) {
-            const action = result.action === 'updated' ? 'güncellendi' : 'oluşturuldu';
-            const actionColor = result.action === 'updated' ? 'warning' : 'success';
+            addLog('✅ Senkronizasyon başarılı!', 'success');
+            addLog(`📊 XML'de toplam ${result.xmlProducts} ürün bulundu`, 'info');
+            addLog(`🔄 İşlenen ürün: ${result.processedCount}`, 'success');
+            addLog(`➕ Oluşturulan: ${result.createdCount}`, 'success');
+            addLog(`📝 Güncellenen: ${result.updatedCount}`, 'warning');
             
-            addLog('Senkronizasyon başarılı!', 'success');
-            addLog(`${result.message}`, actionColor);
-            addLog(`XML'de toplam ${result.xmlProducts} ürün bulundu`, 'info');
-            addLog(`Ürün ID: ${result.productId}`, 'info');
-            addLog(`Fiyat: ${result.price}`, 'info');
-            addLog(`İşlem: ${action}`, actionColor);
+            if (result.errorCount > 0) {
+                addLog(`❌ Hatalı: ${result.errorCount}`, 'error');
+            }
+            
+            // İşlenen ürünlerin detayları
+            if (result.processedProducts && result.processedProducts.length > 0) {
+                addLog('📋 İşlenen ürünler:', 'info');
+                result.processedProducts.forEach(product => {
+                    const actionText = product.action === 'created' ? 'oluşturuldu' : 'güncellendi';
+                    const actionType = product.action === 'created' ? 'success' : 'warning';
+                    addLog(`  • ${product.title} (${actionText}) - ₺${product.price}`, actionType);
+                });
+            }
             
             updateDashboard(); // Dashboard'u güncelle
         } else {
-            addLog(`Senkronizasyon hatası: ${result.message}`, 'error');
+            addLog(`❌ Senkronizasyon hatası: ${result.message}`, 'error');
             if (result.debug) {
                 console.log('Sync debug bilgisi:', result.debug);
                 if (result.debug.shopifyError) {
@@ -783,4 +794,56 @@ function renderSearchResults(products) {
     `).join('');
 
     resultsContainer.innerHTML = productCards;
+}
+
+async function handleCleanTestProducts() {
+    const btn = document.getElementById('clean-test-btn');
+    const config = window.configService.getConfig();
+    
+    if (!config.shopifyUrl || !config.shopifyAdminToken) {
+        addLog('Shopify ayarları eksik! Lütfen önce ayarları yapın.', 'error');
+        return;
+    }
+    
+    // Onay iste
+    if (!confirm('Test ürünlerini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz!')) {
+        return;
+    }
+    
+    btn.disabled = true;
+    btn.textContent = 'Temizleniyor...';
+    
+    addLog('Test ürünleri temizleniyor...', 'info');
+    
+    try {
+        const response = await fetch('/.netlify/functions/api/sync/clean', {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Shopify-Shop-Url': config.shopifyUrl,
+                'X-Shopify-Access-Token': config.shopifyAdminToken
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            addLog(`✅ ${result.message}`, 'success');
+            if (result.deletedProducts && result.deletedProducts.length > 0) {
+                result.deletedProducts.forEach(product => {
+                    addLog(`  • ${product.title} (ID: ${product.id})`, 'info');
+                });
+            }
+            updateDashboard(); // Dashboard'u güncelle
+        } else {
+            addLog(`❌ Temizleme hatası: ${result.message}`, 'error');
+        }
+        
+    } catch (error) {
+        addLog(`❌ Bağlantı hatası: ${error.message}`, 'error');
+        console.error('Clean error:', error);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Test Ürünlerini Temizle';
+    }
 }

@@ -255,6 +255,29 @@ button:hover {
     margin-bottom: 1.5rem;
 }
 
+.sync-buttons {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+}
+
+.sync-buttons button {
+    flex: 1;
+    min-width: 200px;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.sync-buttons button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
 #start-sync {
     background-color: var(--success-color);
     color: white;
