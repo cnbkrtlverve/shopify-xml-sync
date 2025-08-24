@@ -4,451 +4,113 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vervegrand Sync Paneli</title>
-    <style>
-        :root {
-            --bg-color: #f4f6f8;
-            --card-bg: #ffffff;
-            --text-color: #333;
-            --primary-color: #5a67d8;
-            --border-color: #e2e8f0;
-            --success-color: #38a169;
-            --error-color: #e53e3e;
-            --warn-color: #dd6b20;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            margin: 0;
-            padding: 0;
-        }
-        
-        .login-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        
-        .login-form {
-            background: white;
-            padding: 2rem;
-            border-radius: 10px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            width: 400px;
-            max-width: 90%;
-        }
-        
-        .login-form h2 {
-            text-align: center;
-            margin-bottom: 2rem;
-            color: #333;
-        }
-        
-        .form-group {
-            margin-bottom: 1rem;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-        }
-        
-        .form-group input {
-            width: 100%;
-            padding: 0.75rem;
-            border: 1px solid var(--border-color);
-            border-radius: 5px;
-            font-size: 1rem;
-            box-sizing: border-box;
-        }
-        
-        .login-btn {
-            width: 100%;
-            padding: 0.75rem;
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        
-        .login-btn:hover {
-            background-color: #4c51bf;
-        }
-        
-        .error-message {
-            color: var(--error-color);
-            text-align: center;
-            margin-top: 1rem;
-            display: none;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 2rem;
-            display: none;
-        }
-        
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-        
-        h1 {
-            font-size: 1.75rem;
-            margin: 0;
-        }
-        
-        .logout-btn {
-            padding: 0.5rem 1rem;
-            background-color: var(--error-color);
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        
-        nav {
-            background-color: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 0.5rem;
-            margin-bottom: 2rem;
-            display: flex;
-            gap: 0.5rem;
-        }
-        
-        .nav-link {
-            padding: 0.75rem 1.25rem;
-            text-decoration: none;
-            color: #555;
-            font-weight: 600;
-            border-radius: 6px;
-            transition: background-color 0.2s, color 0.2s;
-            cursor: pointer;
-        }
-        
-        .nav-link:hover {
-            background-color: #edf2f7;
-        }
-        
-        .nav-link.active {
-            background-color: var(--primary-color);
-            color: white;
-        }
-        
-        .page {
-            display: none;
-        }
-        
-        .page.active {
-            display: block;
-        }
-        
-        .card {
-            background-color: var(--card-bg);
-            border-radius: 8px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px 0 rgba(0,0,0,0.06);
-            border: 1px solid var(--border-color);
-        }
-        
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 1.5rem;
-        }
-        
-        .card h2 {
-            font-size: 1.25rem;
-            margin-top: 0;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 0.75rem;
-            margin-bottom: 1rem;
-        }
-        
-        .info-grid {
-            display: grid;
-            grid-template-columns: 150px 1fr;
-            gap: 0.5rem;
-            align-items: center;
-        }
-        
-        .info-grid dt {
-            font-weight: 600;
-            color: #555;
-        }
-        
-        .info-grid dd {
-            margin: 0;
-            font-family: "SF Mono", "Fira Code", monospace;
-            word-break: break-all;
-        }
-        
-        .status {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.8rem;
-            font-weight: 600;
-        }
-        
-        .status.success {
-            background-color: var(--success-color);
-            color: white;
-        }
-        
-        .status.error {
-            background-color: var(--error-color);
-            color: white;
-        }
-        
-        button {
-            color: white;
-            border: none;
-            padding: 0.75rem 1.5rem;
-            font-size: 1rem;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        
-        button:disabled {
-            background-color: #a0aec0;
-            cursor: not-allowed;
-        }
-        
-        #sync-button {
-            background-color: var(--primary-color);
-        }
-        
-        #log-container {
-            background-color: #2d3748;
-            color: #e2e8f0;
-            padding: 1.5rem;
-            border-radius: 8px;
-            font-family: "SF Mono", "Fira Code", monospace;
-            font-size: 0.875rem;
-            height: 300px;
-            overflow-y: auto;
-            white-space: pre-wrap;
-        }
-        
-        .sync-options {
-            margin-top: 1rem;
-            padding-top: 1rem;
-            border-top: 1px solid var(--border-color);
-        }
-        
-        .sync-options h4 {
-            margin: 0 0 1rem 0;
-        }
-        
-        .checkbox-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-        
-        .checkbox-group label {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            cursor: pointer;
-        }
-        
-        .config-section {
-            margin-bottom: 2rem;
-            padding: 1rem;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-        }
-        
-        .config-section h3 {
-            margin-top: 0;
-            color: var(--primary-color);
-        }
-        
-        .config-input {
-            width: 100%;
-            padding: 0.5rem;
-            border: 1px solid var(--border-color);
-            border-radius: 4px;
-            margin-bottom: 0.5rem;
-            box-sizing: border-box;
-        }
-        
-        .save-config-btn {
-            background-color: var(--success-color);
-            margin-top: 1rem;
-        }
-    </style>
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <!-- Login Ekranı -->
-    <div id="login-screen" class="login-container">
-        <div class="login-form">
-            <h2>Vervegrand Sync Paneli</h2>
-            <form id="login-form">
-                <div class="form-group">
-                    <label for="username">Kullanıcı Adı:</label>
-                    <input type="text" id="username" required>
-                </div>
-                <div class="form-group">
-                    <label for="password">Şifre:</label>
-                    <input type="password" id="password" required>
-                </div>
-                <button type="submit" class="login-btn">Giriş Yap</button>
-                <div id="login-error" class="error-message">Geçersiz kullanıcı adı veya şifre!</div>
-            </form>
-        </div>
+    <div class="login-container" id="login-container">
+        <form class="login-form" id="login-form">
+            <h2>Yönetim Paneli Giriş</h2>
+            <div class="form-group">
+                <label for="username">Kullanıcı Adı</label>
+                <input type="text" id="username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Şifre</label>
+                <input type="password" id="password" required>
+            </div>
+            <button type="submit" class="login-btn">Giriş Yap</button>
+            <p id="login-error" class="error-message">Kullanıcı adı veya şifre hatalı.</p>
+        </form>
     </div>
 
-    <!-- Ana Panel -->
-    <div id="main-panel" class="container">
+    <div class="container" id="app-container">
         <header>
-            <h1>Vervegrand Sync Paneli</h1>
+            <h1>Vervegrand Sync</h1>
             <button id="logout-btn" class="logout-btn">Çıkış Yap</button>
         </header>
-        
         <nav>
-            <a href="#dashboard" class="nav-link active">Ana Sayfa</a>
-            <a href="#shopify" class="nav-link">Shopify Yönetimi</a>
-            <a href="#config" class="nav-link">Ayarlar</a>
+            <a href="#dashboard" class="nav-link active" data-page="dashboard">Gösterge Paneli</a>
+            <a href="#config" class="nav-link" data-page="config">Yapılandırma</a>
+            <a href="#sync" class="nav-link" data-page="sync">Senkronizasyon</a>
+            <a href="#sheets" class="nav-link" data-page="sheets">Google Sheets</a>
         </nav>
-
-        <!-- Ana Sayfa -->
-        <div id="page-dashboard" class="page active">
-            <div class="grid">
-                <div class="card">
-                    <h2>Shopify Mağazası</h2>
-                    <dl class="info-grid">
-                        <dt>Durum:</dt><dd><span id="shopify-status" class="status">Yükleniyor...</span></dd>
-                        <dt>Mağaza Adı:</dt><dd id="shopify-name">...</dd>
-                        <dt>Email:</dt><dd id="shopify-email">...</dd>
-                        <dt>Ürün Sayısı:</dt><dd id="shopify-products">...</dd>
-                    </dl>
-                </div>
-                <div class="card">
-                    <h2>XML Kaynağı</h2>
-                    <dl class="info-grid">
-                        <dt>Durum:</dt><dd><span id="xml-status" class="status">Yükleniyor...</span></dd>
-                        <dt>Kaynak URL:</dt><dd id="xml-url">...</dd>
-                        <dt>Ürün Sayısı:</dt><dd id="xml-products">...</dd>
-                        <dt>Varyant Sayısı:</dt><dd id="xml-variants">...</dd>
-                    </dl>
-                </div>
-            </div>
-            
-            <div class="card">
-                <div style="display:flex; justify-content: space-between; align-items: center;">
-                    <h2>Senkronizasyon</h2>
-                    <button id="sync-button">Senkronizasyonu Başlat</button>
-                </div>
-                <div class="sync-options">
-                    <h4>Güncelleme Seçenekleri:</h4>
-                    <div class="checkbox-group">
-                        <label><input type="checkbox" id="sync-opt-full" checked> Tam Senkronizasyon</label>
-                        <label><input type="checkbox" class="sync-opt-partial" data-sync="price"> Sadece Fiyat</label>
-                        <label><input type="checkbox" class="sync-opt-partial" data-sync="inventory"> Sadece Stok</label>
-                        <label><input type="checkbox" class="sync-opt-partial" data-sync="details"> Sadece Açıklama</label>
-                        <label><input type="checkbox" class="sync-opt-partial" data-sync="images"> Sadece Fotoğraflar</label>
+        <main>
+            <!-- Dashboard Page -->
+            <div id="page-dashboard" class="page active">
+                <h2>Genel Durum</h2>
+                <div class="dashboard-grid">
+                    <div class="card" id="shopify-card">
+                        <h3>Shopify Mağazası</h3>
+                        <p>Durum: <span id="shopify-status" class="status-badge">Bilinmiyor</span></p>
+                        <p>Mağaza Adı: <span id="shopify-name">N/A</span></p>
+                        <p>Email: <span id="shopify-email">N/A</span></p>
+                        <p>Ürün Sayısı: <span id="shopify-products">N/A</span></p>
                     </div>
-                    <small style="display: block; margin-top: 0.5rem; color: #555;">
-                        "Tam Senkronizasyon" seçiliyken diğer seçenekler devre dışı kalır.
-                    </small>
-                </div>
-            </div>
-            
-            <div class="card">
-                <h2>Senkronizasyon Kayıtları</h2>
-                <div id="log-container">Panel yüklendi. Senkronizasyonu başlatmak için butona tıklayın.</div>
-            </div>
-        </div>
-
-        <!-- Shopify Yönetim Sayfası -->
-        <div id="page-shopify" class="page">
-            <div class="grid">
-                <div class="card">
-                    <h2>Mağaza İstatistikleri</h2>
-                    <dl class="info-grid">
-                        <dt>Toplam Ürün:</dt><dd id="shopify-total-products">Yükleniyor...</dd>
-                        <dt>Toplam Varyant:</dt><dd id="shopify-total-variants">Yükleniyor...</dd>
-                    </dl>
-                </div>
-                <div class="card">
-                    <h2>Fiyat Yönetimi (Google Sheets)</h2>
-                    <p>Shopify'daki tüm ürünleri bir Google Sheets dosyasına aktararak maliyet ve satış fiyatlarını kolayca yönetin.</p>
-                    <div id="google-auth-container">
-                        <p>Google Hesap Durumu: <span id="google-status">Bağlı değil</span></p>
-                        <button id="google-signin">Google Hesabına Giriş Yap</button>
-                        <button id="google-signout" style="display: none;">Google Hesabından Çık</button>
+                    <div class="card" id="xml-card">
+                        <h3>XML Kaynağı</h3>
+                        <p>Durum: <span id="xml-status" class="status-badge">Bilinmiyor</span></p>
+                        <p>Kaynak URL: <span id="xml-source-url">N/A</span></p>
+                        <p>Ürün Sayısı: <span id="xml-products">N/A</span></p>
+                        <p>Varyant Sayısı: <span id="xml-variants">N/A</span></p>
                     </div>
-                    <button id="generate-sheet-button" style="margin-top: 1rem;">Google Sheets Şablonu Oluştur</button>
                 </div>
             </div>
             
-            <div id="sheet-embed-container" class="card" style="display: none;">
-                <h2>Google Sheets Düzenleyici</h2>
-                <iframe id="sheet-iframe" src="" style="width: 100%; height: 600px; border: none; border-radius: 8px;"></iframe>
-                <button id="update-prices-button" style="background-color: var(--success-color); margin-top: 1rem; width: 100%;">Fiyatları Shopify'a Güncelle</button>
-            </div>
-
-            <!-- Ürün arama kartı -->
-            <div class="card">
-                <h2>Ürün Arama</h2>
-                <div style="display: flex; gap: 1rem;">
-                    <input type="text" id="search-input" placeholder="Ürün adı veya SKU ile ara..." style="flex-grow: 1; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px;">
-                    <button id="search-button" style="background-color: var(--primary-color);">Ara</button>
-                </div>
-                <div id="search-results"></div>
-            </div>
-        </div>
-
-        <!-- Ayarlar Sayfası -->
-        <div id="page-config" class="page">
-            <div class="card">
+            <!-- Config Page -->
+            <div id="page-config" class="page">
                 <h2>API Yapılandırması</h2>
-                
                 <div class="config-section">
                     <h3>Shopify Ayarları</h3>
-                    <input type="text" id="shopify-store-url" class="config-input" placeholder="c1grp2-yr.myshopify.com (sadece domain)">
-                    <input type="password" id="shopify-token" class="config-input" placeholder="shpat_... ile başlayan Admin API Token">
-                    <button id="test-shopify" style="background-color: #4299e1; margin-top: 0.5rem;">Shopify Bağlantısını Test Et</button>
+                    <input type="text" id="shopify-url" placeholder="ornek.myshopify.com">
+                    <input type="password" id="shopify-token" placeholder="shpat_...">
+                    <button id="test-shopify">Shopify Bağlantısını Test Et</button>
                 </div>
                 
                 <div class="config-section">
                     <h3>XML Feed Ayarları</h3>
-                    <input type="text" id="xml-feed-url" class="config-input" placeholder="https:// ile başlayan tam XML URL">
-                    <button id="test-xml" style="background-color: #4299e1; margin-top: 0.5rem;">XML Bağlantısını Test Et</button>
+                    <input type="text" id="xml-url" placeholder="https://.../feed.xml">
+                    <button id="test-xml">XML Bağlantısını Test Et</button>
                 </div>
                 
-                <div id="config-status" style="margin: 1rem 0; padding: 1rem; border-radius: 5px; display: none;">
-                    <div id="config-message"></div>
-                </div>
-                
-                <button id="save-config" class="save-config-btn">Ayarları Kaydet</button>
+                <button id="save-config">Ayarları Kaydet</button>
+                <div id="config-message"></div>
             </div>
-        </div>
+            
+            <!-- Sync Page -->
+            <div id="page-sync" class="page">
+                <h2>Senkronizasyon</h2>
+                <div class="sync-controls">
+                    <button id="start-sync">Senkronizasyonu Başlat</button>
+                    <button id="stop-sync" disabled>Durdur</button>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+                    <div class="progress-text">Beklemede</div>
+                </div>
+                <div id="sync-log" class="log-container"></div>
+            </div>
+            
+            <!-- Google Sheets Page -->
+            <div id="page-sheets" class="page">
+                <h2>Google Sheets Entegrasyonu</h2>
+                <div id="google-auth-container">
+                    <p>Google Hesap Durumu: <span id="google-status">Bağlı değil</span></p>
+                    <button id="google-signin">Google Hesabına Giriş Yap</button>
+                    <button id="google-signout" style="display: none;">Google Hesabından Çık</button>
+                </div>
+                <button id="generate-sheet-button" style="margin-top: 1rem;">Google Sheets Şablonu Oluştur</button>
+            </div>
+        </main>
     </div>
 
-    <script src="js/config.js"></script>
-    <script src="js/auth.js"></script>
-    <script src="js/shopify.js"></script>
-    <script src="js/xml.js"></script>
-    <script src="js/google.js"></script>
-    <script src="js/sync.js"></script>
-    <script src="js/main.js"></script>
-    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="public/js/config.js"></script>
+    <script src="public/js/shopify.js"></script>
+    <script src="public/js/xml.js"></script>
+    <script src="public/js/sync.js"></script>
+    <script src="public/js/google.js"></script>
+    <script src="public/js/auth.js"></script>
+    <script src="public/js/main.js"></script>
 </body>
 </html>

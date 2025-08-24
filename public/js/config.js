@@ -11,12 +11,13 @@ class ConfigService {
             shopifyToken: localStorage.getItem('shopify_token') || '',
             xmlUrl: localStorage.getItem('xml_url') || ''
         };
+        return this.config;
     }
     
     saveConfig(config) {
-        localStorage.setItem('shopify_url', config.shopifyUrl);
-        localStorage.setItem('shopify_token', config.shopifyToken);
-        localStorage.setItem('xml_url', config.xmlUrl);
+        localStorage.setItem('shopify_url', config.shopifyUrl || '');
+        localStorage.setItem('shopify_token', config.shopifyToken || '');
+        localStorage.setItem('xml_url', config.xmlUrl || '');
         this.loadConfig(); // Update internal state
     }
     
@@ -41,6 +42,3 @@ class ConfigService {
         return this.config.shopifyUrl && this.config.shopifyToken && this.config.xmlUrl;
     }
 }
-
-// Global config instance
-window.configService = new ConfigService();
