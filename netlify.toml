@@ -7,3 +7,10 @@
   from = "/api/*"
   to = "/.netlify/functions/api/:splat"
   status = 200
+
+# SPA (Single Page App) için catch-all kuralı
+# API dışındaki tüm istekleri index.html'e yönlendirir
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
