@@ -9,8 +9,9 @@ class ShopifyService {
      * @returns {Promise<any>} - API'den gelen yanıt
      */
     async makeRequest(endpoint, method = 'GET', data = null) {
-        const apiUrl = `/api/shopify${endpoint}`;
-        console.log(`API isteği gönderiliyor: ${method} ${apiUrl}`);
+        // Netlify proxy kullan - doğrudan Shopify API'sine
+        const proxyUrl = `/shopify-proxy${endpoint}`;
+        console.log(`Shopify proxy isteği: ${method} ${proxyUrl}`);
 
         try {
             const options = {
@@ -23,19 +24,17 @@ class ShopifyService {
                 options.body = JSON.stringify(data);
             }
 
-            const response = await fetch(apiUrl, options);
+            const response = await fetch(proxyUrl, options);
 
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ message: response.statusText }));
-                console.error('API hatası:', errorData);
-                throw new Error(errorData.message || `API Hatası: ${response.status}`);
+                throw new Error(`HTTP hatası: ${response.status}`);
             }
 
             const responseText = await response.text();
             return responseText ? JSON.parse(responseText) : null;
 
         } catch (error) {
-            console.error(`API isteği başarısız: ${apiUrl}`, error);
+            console.error(`Shopify proxy hatası: ${proxyUrl}`, error);
             throw error;
         }
     }
@@ -46,9 +45,17 @@ class ShopifyService {
      */
     async checkConnection() {
         try {
-            const data = await this.makeRequest('/info');
-            // Backend /info endpoint'i { shop: {...}, productCount: ... } döndürüyor
-            return data ? data.shop : null;
+            // Doğrudan Shopify API'sine shop bilgisi iste
+            const data = await this.makeRequest('/shop.json');
+            if (data && data.shop) {
+                return {
+                    success: true,
+                    shop: data.shop,
+                    name: data.shop.name,
+                    domain: data.shop.domain
+                };
+            }
+            return { success: false, message: 'Shop bilgisi alınamadı' };
         } catch (error) {
             console.error("Shopify bağlantı kontrolü hatası:", error);
             throw error;
