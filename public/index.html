@@ -33,6 +33,7 @@
             <a href="#config" class="nav-link" data-page="config">Yapılandırma</a>
             <a href="#sync" class="nav-link" data-page="sync">Senkronizasyon</a>
             <a href="#sheets" class="nav-link" data-page="sheets">Google Sheets</a>
+            <a href="#search" class="nav-link" data-page="search">Ürün Ara</a>
         </nav>
         <main>
             <!-- Dashboard Page -->
@@ -51,7 +52,17 @@
                         <p>Durum: <span id="xml-status" class="status-badge">Bilinmiyor</span></p>
                         <p>Kaynak URL: <span id="xml-source-url">N/A</span></p>
                         <p>Ürün Sayısı: <span id="xml-products">N/A</span></p>
-                        <p>Varyant Sayısı: <span id="xml-variants">N/A</span></p>
+                        <p>Son Kontrol: <span id="xml-last-checked">N/A</span></p>
+                    </div>
+                    <div class="card" id="google-card">
+                        <h3>Google Entegrasyonu</h3>
+                        <p>Kimlik Durumu: <span id="google-status" class="status-badge">Bilinmiyor</span></p>
+                    </div>
+                    <div class="card" id="sync-summary-card">
+                        <h3>Son Senkronizasyon</h3>
+                        <div id="last-sync-summary">
+                            <p>Henüz bir senkronizasyon yapılmadı.</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -63,7 +74,6 @@
                     <h3>Shopify Ayarları</h3>
                     <input type="text" id="shopify-url" placeholder="ornek.myshopify.com">
                     <input type="password" id="shopify-admin-token" placeholder="Admin Access Token (shpat_...)">
-                    <input type="password" id="shopify-storefront-token" placeholder="Storefront Access Token (isteğe bağlı)">
                     <button id="test-shopify">Shopify Bağlantısını Test Et</button>
                 </div>
                 
@@ -71,6 +81,11 @@
                     <h3>XML Feed Ayarları</h3>
                     <input type="text" id="xml-url" placeholder="https://.../feed.xml">
                     <button id="test-xml">XML Bağlantısını Test Et</button>
+                </div>
+
+                <div class="config-section">
+                    <h3>Google Sheets Ayarları</h3>
+                    <input type="text" id="google-sheet-id" placeholder="Google Sheet ID">
                 </div>
                 
                 <button id="save-config">Ayarları Kaydet</button>
@@ -81,14 +96,15 @@
             <div id="page-sync" class="page">
                 <h2>Senkronizasyon</h2>
                 <div class="sync-controls">
-                    <button id="start-sync">Senkronizasyonu Başlat</button>
-                    <button id="stop-sync" disabled>Durdur</button>
-                </div>
-                <div class="progress-container">
-                    <div class="progress-bar">
-                        <div class="progress-fill"></div>
-                    </div>
-                    <div class="progress-text">Beklemede</div>
+                    <fieldset class="sync-options">
+                        <legend>Senkronizasyon Seçenekleri</legend>
+                        <label><input type="checkbox" id="sync-full" checked> Tam Senkronizasyon</label>
+                        <label><input type="checkbox" id="sync-price"> Sadece Fiyat</label>
+                        <label><input type="checkbox" id="sync-inventory"> Sadece Stok</label>
+                        <label><input type="checkbox" id="sync-details"> Sadece Detaylar (Başlık, Açıklama vb.)</label>
+                        <label><input type="checkbox" id="sync-images"> Sadece Resimler</label>
+                    </fieldset>
+                    <button id="start-sync-btn" class="button-primary">Senkronizasyonu Başlat</button>
                 </div>
                 <div id="sync-log" class="log-container"></div>
             </div>
@@ -96,22 +112,31 @@
             <!-- Google Sheets Page -->
             <div id="page-sheets" class="page">
                 <h2>Google Sheets Entegrasyonu</h2>
-                <div id="google-auth-container">
-                    <p>Google Hesap Durumu: <span id="google-status">Bağlı değil</span></p>
-                    <button id="google-signin">Google Hesabına Giriş Yap</button>
-                    <button id="google-signout" style="display: none;">Google Hesabından Çık</button>
+                <div class="google-controls">
+                    <button id="google-auth-btn">Google ile Bağlan</button>
+                    <button id="create-sheet-btn">Shopify Ürünlerini Sheet'e Aktar</button>
                 </div>
-                <button id="generate-sheet-button" style="margin-top: 1rem;">Google Sheets Şablonu Oluştur</button>
+                <p id="sheet-status"></p>
+            </div>
+
+            <!-- Search Page -->
+            <div id="page-search" class="page">
+                <h2>Shopify Ürün Arama</h2>
+                <div class="search-bar">
+                    <input type="text" id="product-search-input" placeholder="Ürün adı veya SKU ile ara...">
+                </div>
+                <div id="search-results-container" class="results-container"></div>
             </div>
         </main>
     </div>
-
+    
+    <!-- Scripts -->
     <script src="js/config.js"></script>
+    <script src="js/auth.js"></script>
     <script src="js/shopify.js"></script>
     <script src="js/xml.js"></script>
     <script src="js/sync.js"></script>
     <script src="js/google.js"></script>
-    <script src="js/auth.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>
