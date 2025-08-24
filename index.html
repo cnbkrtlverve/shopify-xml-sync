@@ -323,6 +323,7 @@
         
         <nav>
             <a href="#dashboard" class="nav-link active">Ana Sayfa</a>
+            <a href="#shopify" class="nav-link">Shopify Yönetimi</a>
             <a href="#config" class="nav-link">Ayarlar</a>
         </nav>
 
@@ -375,6 +376,45 @@
             </div>
         </div>
 
+        <!-- Shopify Yönetim Sayfası -->
+        <div id="page-shopify" class="page">
+            <div class="grid">
+                <div class="card">
+                    <h2>Mağaza İstatistikleri</h2>
+                    <dl class="info-grid">
+                        <dt>Toplam Ürün:</dt><dd id="shopify-total-products">Yükleniyor...</dd>
+                        <dt>Toplam Varyant:</dt><dd id="shopify-total-variants">Yükleniyor...</dd>
+                    </dl>
+                </div>
+                <div class="card">
+                    <h2>Fiyat Yönetimi (Google Sheets)</h2>
+                    <p>Shopify'daki tüm ürünleri bir Google Sheets dosyasına aktararak maliyet ve satış fiyatlarını kolayca yönetin.</p>
+                    <div id="google-auth-container">
+                        <p>Google Hesap Durumu: <span id="google-status">Bağlı değil</span></p>
+                        <button id="google-signin">Google Hesabına Giriş Yap</button>
+                        <button id="google-signout" style="display: none;">Google Hesabından Çık</button>
+                    </div>
+                    <button id="generate-sheet-button" style="margin-top: 1rem;">Google Sheets Şablonu Oluştur</button>
+                </div>
+            </div>
+            
+            <div id="sheet-embed-container" class="card" style="display: none;">
+                <h2>Google Sheets Düzenleyici</h2>
+                <iframe id="sheet-iframe" src="" style="width: 100%; height: 600px; border: none; border-radius: 8px;"></iframe>
+                <button id="update-prices-button" style="background-color: var(--success-color); margin-top: 1rem; width: 100%;">Fiyatları Shopify'a Güncelle</button>
+            </div>
+
+            <!-- Ürün arama kartı -->
+            <div class="card">
+                <h2>Ürün Arama</h2>
+                <div style="display: flex; gap: 1rem;">
+                    <input type="text" id="search-input" placeholder="Ürün adı veya SKU ile ara..." style="flex-grow: 1; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 6px;">
+                    <button id="search-button" style="background-color: var(--primary-color);">Ara</button>
+                </div>
+                <div id="search-results"></div>
+            </div>
+        </div>
+
         <!-- Ayarlar Sayfası -->
         <div id="page-config" class="page">
             <div class="card">
@@ -406,7 +446,9 @@
     <script src="js/auth.js"></script>
     <script src="js/shopify.js"></script>
     <script src="js/xml.js"></script>
+    <script src="js/google.js"></script>
     <script src="js/sync.js"></script>
     <script src="js/main.js"></script>
+    <script src="https://apis.google.com/js/api.js"></script>
 </body>
 </html>

@@ -10,38 +10,76 @@ class XMLService {
         }
         
         try {
-            // Birden fazla CORS proxy deneyeceğiz
+            // Önce doğrudan deneyelim (bazı sunucular CORS'a izin verebilir)
+            try {
+                const directResponse = await fetch(window.appConfig.xmlFeedUrl, {
+                    mode: 'cors',
+                    headers: {
+                        'Accept': 'application/xml, text/xml, */*'
+                    }
+                });
+                
+                if (directResponse.ok) {
+                    console.log('Doğrudan XML erişimi başarılı');
+                    return await directResponse.text();
+                }
+            } catch (directError) {
+                console.log('Doğrudan erişim başarısız, proxy denenecek:', directError.message);
+            }
+            
+            // Proxy'leri deneyelim
             const proxies = [
                 `https://api.allorigins.win/get?url=${encodeURIComponent(window.appConfig.xmlFeedUrl)}`,
                 `https://corsproxy.io/?${encodeURIComponent(window.appConfig.xmlFeedUrl)}`,
-                `https://cors-anywhere.herokuapp.com/${window.appConfig.xmlFeedUrl}`
+                `https://cors-anywhere.herokuapp.com/${window.appConfig.xmlFeedUrl}`,
+                `https://thingproxy.freeboard.io/fetch/${window.appConfig.xmlFeedUrl}`
             ];
             
             let lastError;
             
-            for (const proxyUrl of proxies) {
+            for (let i = 0; i < proxies.length; i++) {
+                const proxyUrl = proxies[i];
                 try {
-                    console.log(`Proxy deneniyor: ${proxyUrl}`);
-                    const response = await fetch(proxyUrl);
+                    console.log(`Proxy ${i+1}/${proxies.length} deneniyor: ${proxyUrl}`);
+                    
+                    const response = await Promise.race([
+                        fetch(proxyUrl),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Timeout')), 10000)
+                        )
+                    ]);
                     
                     if (!response.ok) {
-                        throw new Error(`HTTP Error: ${response.status}`);
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                     }
                     
-                    const data = await response.json();
+                    const responseText = await response.text();
                     
                     // AllOrigins formatında mı kontrol et
-                    if (data.contents) {
-                        return data.contents;
+                    try {
+                        const jsonData = JSON.parse(responseText);
+                        if (jsonData.contents) {
+                            console.log(`Proxy ${i+1} başarılı (JSON format)`);
+                            return jsonData.contents;
+                        }
+                    } catch (jsonError) {
+                        // JSON değilse direkt XML olarak kabul et
+                        if (responseText.includes('<?xml') || responseText.includes('<Urunler')) {
+                            console.log(`Proxy ${i+1} başarılı (XML format)`);
+                            return responseText;
+                        }
                     }
                     
-                    // Doğrudan XML string olarak dön
-                    return data;
+                    throw new Error('Geçersiz XML formatı');
                     
                 } catch (error) {
-                    console.warn(`Proxy başarısız: ${proxyUrl}`, error);
+                    console.warn(`Proxy ${i+1} başarısız:`, error.message);
                     lastError = error;
-                    continue;
+                    
+                    // Son proxy değilse devam et
+                    if (i < proxies.length - 1) {
+                        continue;
+                    }
                 }
             }
             

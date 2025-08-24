@@ -170,13 +170,22 @@ async function handleTestShopify() {
     
     showConfigMessage('Shopify bağlantısı test ediliyor...', 'info');
     
-    // Geçici olarak ayarları güncelle
-    const tempConfig = new Config();
-    tempConfig.saveConfig(shopifyStoreUrl, shopifyToken, window.appConfig.xmlFeedUrl);
-    
     try {
-        const tempShopify = new ShopifyService();
-        const result = await tempShopify.checkConnection();
+        // Geçici config oluştur
+        const originalConfig = {
+            storeUrl: window.appConfig.shopifyStoreUrl,
+            token: window.appConfig.shopifyToken
+        };
+        
+        // Test için geçici ayarla
+        window.appConfig.shopifyStoreUrl = shopifyStoreUrl;
+        window.appConfig.shopifyToken = shopifyToken;
+        
+        const result = await window.shopifyService.checkConnection();
+        
+        // Orjinal ayarları geri yükle
+        window.appConfig.shopifyStoreUrl = originalConfig.storeUrl;
+        window.appConfig.shopifyToken = originalConfig.token;
         
         if (result.success) {
             showConfigMessage('✅ Shopify bağlantısı başarılı!', 'success');
@@ -184,6 +193,9 @@ async function handleTestShopify() {
             showConfigMessage('❌ Shopify bağlantı hatası: ' + result.message, 'error');
         }
     } catch (error) {
+        // Orjinal ayarları geri yükle
+        window.appConfig.shopifyStoreUrl = originalConfig.storeUrl;
+        window.appConfig.shopifyToken = originalConfig.token;
         showConfigMessage('❌ Shopify bağlantı hatası: ' + error.message, 'error');
     }
 }
@@ -198,13 +210,17 @@ async function handleTestXML() {
     
     showConfigMessage('XML bağlantısı test ediliyor...', 'info');
     
-    // Geçici olarak ayarları güncelle
-    const tempConfig = new Config();
-    tempConfig.saveConfig(window.appConfig.shopifyStoreUrl, window.appConfig.shopifyToken, xmlFeedUrl);
-    
     try {
-        const tempXML = new XMLService();
-        const result = await tempXML.checkConnection();
+        // Geçici config oluştur
+        const originalUrl = window.appConfig.xmlFeedUrl;
+        
+        // Test için geçici ayarla
+        window.appConfig.xmlFeedUrl = xmlFeedUrl;
+        
+        const result = await window.xmlService.checkConnection();
+        
+        // Orjinal ayarları geri yükle
+        window.appConfig.xmlFeedUrl = originalUrl;
         
         if (result.success) {
             showConfigMessage('✅ XML bağlantısı başarılı!', 'success');
@@ -212,6 +228,8 @@ async function handleTestXML() {
             showConfigMessage('❌ XML bağlantı hatası: ' + result.message, 'error');
         }
     } catch (error) {
+        // Orjinal ayarları geri yükle
+        window.appConfig.xmlFeedUrl = originalUrl;
         showConfigMessage('❌ XML bağlantı hatası: ' + error.message, 'error');
     }
 }
@@ -362,8 +380,142 @@ async function updateXMLStatus() {
 function addLog(message, level = 'info') {
     const logContainer = document.getElementById('log-container');
     const timestamp = new Date().toLocaleTimeString();
-    const logEntry = `[${timestamp}] ${message}\\n`;
+    const logEntry = `[${timestamp}] ${message}\n`;
     
     logContainer.textContent += logEntry;
     logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+// Google Sheets fonksiyonları
+async function handleGoogleSignIn() {
+    try {
+        addLog('Google hesabına giriş yapılıyor...', 'info');
+        const success = await window.googleService.signIn();
+        
+        if (success) {
+            addLog('Google hesabına başarıyla giriş yapıldı!', 'info');
+            updateGoogleUI(true);
+        } else {
+            addLog('Google hesabına giriş yapılamadı!', 'error');
+        }
+    } catch (error) {
+        console.error('Google sign-in error:', error);
+        addLog(`Google giriş hatası: ${error.message}`, 'error');
+    }
+}
+
+async function handleGoogleSignOut() {
+    try {
+        const success = await window.googleService.signOut();
+        
+        if (success) {
+            addLog('Google hesabından çıkış yapıldı', 'info');
+            updateGoogleUI(false);
+        }
+    } catch (error) {
+        console.error('Google sign-out error:', error);
+        addLog(`Google çıkış hatası: ${error.message}`, 'error');
+    }
+}
+
+function updateGoogleUI(isSignedIn) {
+    const signInBtn = document.getElementById('google-signin');
+    const signOutBtn = document.getElementById('google-signout');
+    const status = document.getElementById('google-status');
+    
+    if (signInBtn) signInBtn.style.display = isSignedIn ? 'none' : 'inline-block';
+    if (signOutBtn) signOutBtn.style.display = isSignedIn ? 'inline-block' : 'none';
+    if (status) status.textContent = isSignedIn ? 'Bağlı' : 'Bağlı değil';
+}
+
+// Sync progress handler
+function handleSyncProgress(event) {
+    const { message, percentage, totalProducts, processedProducts, isRunning } = event.detail;
+    
+    // Progress gösterimi
+    addLog(`${message} (${processedProducts}/${totalProducts})`, 'info');
+    
+    // Sync button durumunu güncelle
+    const syncButton = document.getElementById('sync-button');
+    if (syncButton) {
+        syncButton.disabled = isRunning;
+        syncButton.textContent = isRunning ? 'Durduruluyor...' : 'Senkronizasyonu Başlat';
+    }
+}
+
+// Event listener'ları ekle
+document.addEventListener('DOMContentLoaded', function() {
+    // Google Sheets event listeners
+    document.getElementById('google-signin')?.addEventListener('click', handleGoogleSignIn);
+    document.getElementById('google-signout')?.addEventListener('click', handleGoogleSignOut);
+    document.getElementById('generate-sheet-button')?.addEventListener('click', handleGenerateSheet);
+    
+    // Sync progress listener
+    window.addEventListener('syncProgress', handleSyncProgress);
+    
+    // Google UI'yi başlat
+    setTimeout(() => {
+        updateGoogleUI(window.googleService?.isSignedIn || false);
+    }, 1000);
+});
+
+async function handleGenerateSheet() {
+    try {
+        if (!window.googleService.isSignedIn) {
+            addLog('Google Sheets şablonu oluşturmak için önce Google hesabına giriş yapın!', 'error');
+            return;
+        }
+        
+        addLog('Shopify ürünleri getiriliyor...', 'info');
+        const products = await window.shopifyService.getAllProducts();
+        
+        if (!products || products.length === 0) {
+            addLog('Shopify\'da ürün bulunamadı!', 'error');
+            return;
+        }
+        
+        addLog(`${products.length} ürün bulundu, Google Sheets oluşturuluyor...`, 'info');
+        
+        // Başlık satırı
+        const data = [
+            ['ID', 'Başlık', 'SKU', 'Mevcut Fiyat', 'Yeni Fiyat', 'Maliyet', 'Kar Marjı (%)', 'Kategori', 'Stok', 'Durum']
+        ];
+        
+        // Ürün verilerini ekle
+        products.forEach(product => {
+            if (product.variants && product.variants.length > 0) {
+                product.variants.forEach(variant => {
+                    const currentPrice = parseFloat(variant.price) || 0;
+                    data.push([
+                        product.id,
+                        product.title,
+                        variant.sku || '',
+                        currentPrice,
+                        '', // Yeni fiyat - kullanıcı dolduracak
+                        '', // Maliyet - kullanıcı dolduracak
+                        '', // Kar marjı - formül ile hesaplanacak
+                        product.product_type || '',
+                        variant.inventory_quantity || 0,
+                        product.status
+                    ]);
+                });
+            }
+        });
+        
+        const spreadsheet = await window.googleService.createSpreadsheet(
+            `Shopify Ürünler - ${new Date().toLocaleDateString('tr-TR')}`,
+            data
+        );
+        
+        addLog(`Google Sheets başarıyla oluşturuldu! URL: ${spreadsheet.url}`, 'success');
+        
+        // URL'yi açmak için sor
+        if (confirm('Google Sheets dosyasını şimdi açmak ister misiniz?')) {
+            window.open(spreadsheet.url, '_blank');
+        }
+        
+    } catch (error) {
+        console.error('Generate sheet error:', error);
+        addLog(`Google Sheets oluşturma hatası: ${error.message}`, 'error');
+    }
 }
