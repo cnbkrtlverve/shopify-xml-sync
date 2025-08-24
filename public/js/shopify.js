@@ -11,61 +11,43 @@ class ShopifyService {
         }
 
         const targetUrl = `https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`;
+        
+        // Using a different, more modern proxy designed for this purpose.
+        const proxyUrl = 'https://proxy.cors.sh/';
 
-        // A list of proxies to try in order.
-        const proxies = [
-            `https://cors.sh/${targetUrl}`, // Uses its own header system
-            `https://thingproxy.freeboard.io/fetch/${targetUrl}`
-        ];
-
-        for (let i = 0; i < proxies.length; i++) {
-            const proxyUrl = proxies[i];
-            console.log(`Proxy denemesi (${i + 1}/${proxies.length}): ${proxyUrl}`);
-
-            try {
-                const headers = {
+        console.log(`Yeni proxy denemesi: ${proxyUrl}${targetUrl}`);
+        
+        try {
+            const response = await fetch(`${proxyUrl}${targetUrl}`, {
+                method: method,
+                headers: {
+                    // This specific proxy requires the API key to be sent in this header.
+                    'x-cors-api-key': 'temp_1234567890', // Use a temporary key for this public proxy
                     'X-Shopify-Access-Token': config.shopifyToken,
                     'Content-Type': 'application/json'
-                };
+                },
+                body: data ? JSON.stringify(data) : null
+            });
 
-                // cors.sh requires headers to be prefixed
-                if (proxyUrl.includes('cors.sh')) {
-                    headers['x-cors-headers'] = JSON.stringify({
-                        'X-Shopify-Access-Token': config.shopifyToken,
-                        'Content-Type': 'application/json'
-                    });
-                }
-                
-                const response = await fetch(proxyUrl, {
-                    method: method,
-                    headers: headers,
-                    body: data ? JSON.stringify(data) : null
-                });
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error(`Proxy ${proxyUrl} ile hata:`, errorText);
-                    // Don't throw yet, try the next proxy
-                    continue;
-                }
-
-                const responseText = await response.text();
-                if (!responseText) {
-                    console.log(`Proxy ${proxyUrl} boş yanıt döndürdü.`);
-                    return null;
-                }
-                
-                console.log(`Proxy ${proxyUrl} ile bağlantı başarılı!`);
-                return JSON.parse(responseText);
-
-            } catch (error) {
-                console.error(`Proxy ${proxyUrl} ile ağ hatası:`, error);
-                // Try the next proxy
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Proxy Hatası:', `Durum: ${response.status}`, errorText);
+                throw new Error(`Proxy sunucusu hata döndürdü. Durum: ${response.status}`);
             }
-        }
 
-        // If all proxies failed
-        throw new Error('Tüm proxy denemeleri başarısız oldu. Shopify API\'ye ulaşılamıyor.');
+            const responseText = await response.text();
+            if (!responseText) {
+                console.log('Proxy boş yanıt döndürdü.');
+                return null;
+            }
+            
+            console.log('Bağlantı başarılı!');
+            return JSON.parse(responseText);
+
+        } catch (error) {
+            console.error('Ağ veya Fetch hatası:', error);
+            throw new Error(`Shopify API'ye ulaşılamadı: ${error.message}`);
+        }
     }
     
     async checkConnection() {
