@@ -558,24 +558,79 @@ exports.handler = async (event, context) => {
       }
       
       try {
-        // Basit test: XML'den 1 ürün al, Shopify'a gönder
+        // XML'den ürünleri al
         const xmlResponse = await axios.get('https://stildiva.sentos.com.tr/xml-sentos-out/1', { timeout: 10000 });
         const parsed = await xml2js.parseStringPromise(xmlResponse.data, { explicitArray: false, trim: true });
         const products = Array.isArray(parsed.Urunler.Urun) ? parsed.Urunler.Urun : [parsed.Urunler.Urun];
         
-        // İlk ürünü al
+        console.log(`XML'den ${products.length} ürün bulundu`);
+        
+        if (products.length === 0) {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({
+              success: false,
+              message: 'XML\'de ürün bulunamadı'
+            })
+          };
+        }
+        
+        // İlk ürünü al ve işle
         const firstProduct = products[0];
+        console.log('İlk ürün:', firstProduct.urunismi);
+        
+        // Fiyatı düzelt (Türkçe format: "0,00" -> "0.00")
+        let price = '10.00'; // default
+        if (firstProduct.satis_fiyati) {
+          const cleanPrice = String(firstProduct.satis_fiyati).replace(',', '.');
+          const numPrice = parseFloat(cleanPrice);
+          if (numPrice > 0) {
+            price = numPrice.toFixed(2);
+          }
+        }
+        
+        // Basit Shopify ürünü oluştur
         const shopifyProduct = {
           title: firstProduct.urunismi || 'Test Ürün',
-          body_html: firstProduct.aciklama || 'Test açıklama',
+          body_html: firstProduct.aciklama || 'XML\'den aktarılan ürün',
           product_type: 'XML Import',
           vendor: 'Sentos',
           status: 'draft',
           variants: [{
-            price: firstProduct.satis_fiyati || '10.00',
-            inventory_quantity: parseInt(firstProduct.stok) || 0
+            price: price,
+            inventory_quantity: parseInt(firstProduct.stok) || 0,
+            weight: 0,
+            requires_shipping: true
           }]
         };
+        
+        console.log('Shopify\'a gönderilecek ürün:', shopifyProduct.title, 'Fiyat:', price);
+        
+        // Önce aynı isimde ürün var mı kontrol et
+        try {
+          const existingProducts = await axios.get(`https://${shopUrl}/admin/api/2024-07/products.json?title=${encodeURIComponent(shopifyProduct.title)}&limit=1`, {
+            headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
+            timeout: 5000
+          });
+          
+          if (existingProducts.data.products && existingProducts.data.products.length > 0) {
+            return {
+              statusCode: 200,
+              headers,
+              body: JSON.stringify({
+                success: true,
+                message: `Ürün zaten mevcut: ${shopifyProduct.title}`,
+                productId: existingProducts.data.products[0].id,
+                title: shopifyProduct.title,
+                action: 'skipped',
+                xmlProducts: products.length
+              })
+            };
+          }
+        } catch (checkError) {
+          console.log('Ürün kontrol hatası (devam ediliyor):', checkError.message);
+        }
         
         // Shopify'a gönder
         const shopifyResponse = await axios.post(`https://${shopUrl}/admin/api/2024-07/products.json`, {
@@ -590,9 +645,11 @@ exports.handler = async (event, context) => {
           headers,
           body: JSON.stringify({
             success: true,
-            message: 'Test ürünü oluşturuldu',
+            message: `Ürün başarıyla oluşturuldu: ${shopifyProduct.title}`,
             productId: shopifyResponse.data.product.id,
-            title: shopifyProduct.title
+            title: shopifyProduct.title,
+            price: price,
+            xmlProducts: products.length
           })
         };
         
