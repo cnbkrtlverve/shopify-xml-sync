@@ -10,78 +10,104 @@ class ShopifyService {
             throw new Error('Shopify ayarları eksik. Lütfen yapılandırma sayfasını kontrol edin.');
         }
 
-        // JSONP callback yaklaşımı deneyelim
-        if (method === 'GET' && endpoint.includes('shop.json')) {
-            return await this.makeJSONPRequest(config, endpoint);
+        const targetUrl = `https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`;
+        
+        console.log(`Doğrudan istek gönderiliyor (no-cors mode): ${targetUrl}`);
+
+        try {
+            // İlk olarak no-cors mode ile deneyelim
+            const response = await fetch(targetUrl, {
+                method: method,
+                mode: 'no-cors',
+                headers: {
+                    'X-Shopify-Access-Token': config.shopifyToken,
+                    'Content-Type': 'application/json'
+                },
+                body: data ? JSON.stringify(data) : null
+            });
+
+            // no-cors mode'da response body okuyamayız, bu yüzden farklı bir yaklaşım
+            console.log('No-cors isteği gönderildi, response status:', response.status);
+            
+            // Eğer status 0 ise (opaque response), başka bir yöntem deneyelim
+            if (response.type === 'opaque') {
+                console.log('Opaque response alındı, iframe yaklaşımı deneniyor...');
+                return await this.makeIframeRequest(config, endpoint);
+            }
+
+        } catch (error) {
+            console.log('No-cors başarısız, alternatif yöntem deneniyor:', error.message);
         }
 
-        // Farklı proxy servisleri deneyelim
-        const proxyServices = [
-            `https://corsproxy.io/?${encodeURIComponent(`https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`)}`,
-            `https://cors-anywhere.herokuapp.com/https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`,
-            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(`https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`)}`
-        ];
+        // Alternatif yaklaşım: Doğrudan istek (CORS hatası alacağız ama denemeye değer)
+        try {
+            console.log('Doğrudan CORS isteği deneniyor...');
+            const response = await fetch(targetUrl, {
+                method: method,
+                headers: {
+                    'X-Shopify-Access-Token': config.shopifyToken,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: data ? JSON.stringify(data) : null
+            });
 
-        for (let i = 0; i < proxyServices.length; i++) {
-            try {
-                console.log(`Proxy ${i + 1} deneniyor: ${proxyServices[i]}`);
-                
-                const response = await fetch(proxyServices[i], {
-                    method: method,
-                    headers: {
-                        'X-Shopify-Access-Token': config.shopifyToken,
-                        'Content-Type': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    body: data ? JSON.stringify(data) : null
-                });
-
-                if (response.ok) {
-                    const responseText = await response.text();
-                    if (!responseText) return null;
-                    return JSON.parse(responseText);
-                }
-            } catch (error) {
-                console.log(`Proxy ${i + 1} başarısız: ${error.message}`);
-                if (i === proxyServices.length - 1) {
-                    throw new Error(`Tüm proxy servisleri başarısız oldu. Son hata: ${error.message}`);
-                }
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
+
+            const responseText = await response.text();
+            if (!responseText) return null;
+            return JSON.parse(responseText);
+
+        } catch (error) {
+            console.error('Tüm yöntemler başarısız:', error);
+            throw new Error(`Shopify API'ye ulaşılamadı: ${error.message}. Lütfen ağ bağlantınızı kontrol edin.`);
         }
     }
 
-    async makeJSONPRequest(config, endpoint) {
+    async makeIframeRequest(config, endpoint) {
         return new Promise((resolve, reject) => {
-            const callbackName = 'shopifyCallback' + Date.now();
-            const script = document.createElement('script');
-            const url = `https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}?callback=${callbackName}`;
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
             
-            // Global callback fonksiyonu oluştur
-            window[callbackName] = function(data) {
-                document.head.removeChild(script);
-                delete window[callbackName];
-                resolve(data);
-            };
+            const targetUrl = `https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`;
             
-            script.onerror = function() {
-                document.head.removeChild(script);
-                delete window[callbackName];
-                reject(new Error('JSONP isteği başarısız'));
-            };
-            
-            script.src = url;
-            document.head.appendChild(script);
-            
-            // Timeout ekle
-            setTimeout(() => {
-                if (window[callbackName]) {
-                    document.head.removeChild(script);
-                    delete window[callbackName];
-                    reject(new Error('JSONP isteği zaman aşımına uğradı'));
+            iframe.onload = function() {
+                try {
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                    const content = iframeDoc.body.textContent;
+                    document.body.removeChild(iframe);
+                    
+                    if (content) {
+                        resolve(JSON.parse(content));
+                    } else {
+                        reject(new Error('Iframe içeriği boş'));
+                    }
+                } catch (error) {
+                    document.body.removeChild(iframe);
+                    reject(new Error('Iframe verisi okunamadı: ' + error.message));
                 }
-            }, 10000);
+            };
+            
+            iframe.onerror = function() {
+                document.body.removeChild(iframe);
+                reject(new Error('Iframe yüklenemedi'));
+            };
+            
+            iframe.src = targetUrl;
+            document.body.appendChild(iframe);
+            
+            // Timeout
+            setTimeout(() => {
+                if (document.body.contains(iframe)) {
+                    document.body.removeChild(iframe);
+                    reject(new Error('Iframe isteği zaman aşımına uğradı'));
+                }
+            }, 15000);
         });
     }
+
     
     async checkConnection() {
         try {
