@@ -559,7 +559,7 @@ exports.handler = async (event, context) => {
       
       try {
         // XML'den ürünleri al
-        const xmlResponse = await axios.get('https://stildiva.sentos.com.tr/xml-sentos-out/1', { timeout: 10000 });
+        const xmlResponse = await axios.get('https://stildiva.sentos.com.tr/xml-sentos-out/1', { timeout: 15000 });
         const parsed = await xml2js.parseStringPromise(xmlResponse.data, { explicitArray: false, trim: true });
         const products = Array.isArray(parsed.Urunler.Urun) ? parsed.Urunler.Urun : [parsed.Urunler.Urun];
         
@@ -578,7 +578,7 @@ exports.handler = async (event, context) => {
         
         // İlk ürünü al ve işle
         const firstProduct = products[0];
-        console.log('İlk ürün:', firstProduct.urunismi);
+        console.log('İşlenecek ürün:', firstProduct.urunismi);
         
         // Fiyatı düzelt (Türkçe format: "0,00" -> "0.00")
         let price = '10.00'; // default
@@ -590,67 +590,103 @@ exports.handler = async (event, context) => {
           }
         }
         
-        // Basit Shopify ürünü oluştur
+        // Shopify ürün objesi
         const shopifyProduct = {
           title: firstProduct.urunismi || 'Test Ürün',
           body_html: firstProduct.aciklama || 'XML\'den aktarılan ürün',
-          product_type: 'XML Import',
+          product_type: firstProduct.kategori_ismi || 'XML Import',
           vendor: 'Sentos',
           status: 'draft',
           variants: [{
             price: price,
             inventory_quantity: parseInt(firstProduct.stok) || 0,
             weight: 0,
-            requires_shipping: true
+            requires_shipping: true,
+            sku: firstProduct.stok_kodu || ''
           }]
         };
         
-        console.log('Shopify\'a gönderilecek ürün:', shopifyProduct.title, 'Fiyat:', price);
+        console.log('Shopify ürün hazırlandı:', shopifyProduct.title, 'Fiyat:', price);
         
-        // Önce aynı isimde ürün var mı kontrol et
+        // Shopify'da aynı başlıkta ürün var mı kontrol et
+        let existingProduct = null;
         try {
-          const existingProducts = await axios.get(`https://${shopUrl}/admin/api/2024-07/products.json?title=${encodeURIComponent(shopifyProduct.title)}&limit=1`, {
+          const searchResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/products.json?title=${encodeURIComponent(shopifyProduct.title)}&limit=1`, {
             headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
             timeout: 5000
           });
           
-          if (existingProducts.data.products && existingProducts.data.products.length > 0) {
-            return {
-              statusCode: 200,
-              headers,
-              body: JSON.stringify({
-                success: true,
-                message: `Ürün zaten mevcut: ${shopifyProduct.title}`,
-                productId: existingProducts.data.products[0].id,
-                title: shopifyProduct.title,
-                action: 'skipped',
-                xmlProducts: products.length
-              })
-            };
+          if (searchResponse.data.products && searchResponse.data.products.length > 0) {
+            existingProduct = searchResponse.data.products[0];
+            console.log('Mevcut ürün bulundu, güncelleme yapılacak. ID:', existingProduct.id);
           }
-        } catch (checkError) {
-          console.log('Ürün kontrol hatası (devam ediliyor):', checkError.message);
+        } catch (searchError) {
+          console.log('Ürün arama hatası (devam ediliyor):', searchError.message);
         }
         
-        // Shopify'a gönder
-        const shopifyResponse = await axios.post(`https://${shopUrl}/admin/api/2024-07/products.json`, {
-          product: shopifyProduct
-        }, {
-          headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
-          timeout: 10000
-        });
+        let result;
+        
+        if (existingProduct) {
+          // GÜNCELLEME: Mevcut ürünü güncelle
+          try {
+            const updateData = {
+              id: existingProduct.id,
+              body_html: shopifyProduct.body_html,
+              product_type: shopifyProduct.product_type,
+              variants: [{
+                id: existingProduct.variants[0].id, // Mevcut variant ID'si
+                price: price,
+                inventory_quantity: parseInt(firstProduct.stok) || 0,
+                sku: firstProduct.stok_kodu || ''
+              }]
+            };
+            
+            const updateResponse = await axios.put(`https://${shopUrl}/admin/api/2024-07/products/${existingProduct.id}.json`, {
+              product: updateData
+            }, {
+              headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
+              timeout: 10000
+            });
+            
+            result = {
+              success: true,
+              message: `Ürün güncellendi: ${shopifyProduct.title}`,
+              productId: existingProduct.id,
+              title: shopifyProduct.title,
+              price: price,
+              action: 'updated',
+              xmlProducts: products.length
+            };
+            
+          } catch (updateError) {
+            console.error('Güncelleme hatası:', updateError.message);
+            throw updateError;
+          }
+          
+        } else {
+          // OLUŞTURMA: Yeni ürün oluştur
+          const createResponse = await axios.post(`https://${shopUrl}/admin/api/2024-07/products.json`, {
+            product: shopifyProduct
+          }, {
+            headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
+            timeout: 10000
+          });
+          
+          result = {
+            success: true,
+            message: `Yeni ürün oluşturuldu: ${shopifyProduct.title}`,
+            productId: createResponse.data.product.id,
+            title: shopifyProduct.title,
+            price: price,
+            action: 'created',
+            xmlProducts: products.length
+          };
+        }
         
         return {
           statusCode: 200,
           headers,
-          body: JSON.stringify({
-            success: true,
-            message: `Ürün başarıyla oluşturuldu: ${shopifyProduct.title}`,
-            productId: shopifyResponse.data.product.id,
-            title: shopifyProduct.title,
-            price: price,
-            xmlProducts: products.length
-          })
+          body: JSON.stringify(result)
         };
         
       } catch (error) {

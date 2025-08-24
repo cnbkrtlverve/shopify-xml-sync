@@ -627,28 +627,16 @@ function handleStartSync() {
     })
     .then(result => {
         if (result.success) {
+            const action = result.action === 'updated' ? 'güncellendi' : 'oluşturuldu';
+            const actionColor = result.action === 'updated' ? 'warning' : 'success';
+            
             addLog('Senkronizasyon başarılı!', 'success');
-            addLog(`İşlenen ürün sayısı: ${result.processedCount || 0}`, 'info');
-            addLog(`Oluşturulan ürün: ${result.createdCount || 0}`, 'success');
-            addLog(`Güncellenen ürün: ${result.updatedCount || 0}`, 'info');
+            addLog(`${result.message}`, actionColor);
+            addLog(`XML'de toplam ${result.xmlProducts} ürün bulundu`, 'info');
+            addLog(`Ürün ID: ${result.productId}`, 'info');
+            addLog(`Fiyat: ${result.price}`, 'info');
+            addLog(`İşlem: ${action}`, actionColor);
             
-            if (result.errorCount > 0) {
-                addLog(`Hatalı ürün: ${result.errorCount}`, 'warning');
-            }
-            
-            if (result.debug) {
-                addLog(`XML'den toplam ürün: ${result.debug.totalXmlProducts}`, 'info');
-                addLog(`Shopify URL: ${result.debug.shopifyUrl}`, 'info');
-                addLog(`Bulunan yol: ${result.debug.foundPath}`, 'info');
-                
-                if (result.debug.testProductKeys) {
-                    addLog(`Test ürün alanları: ${result.debug.testProductKeys.slice(0, 5).join(', ')}`, 'info');
-                }
-                
-                if (result.debug.shopifyProductId) {
-                    addLog(`Shopify ürün ID: ${result.debug.shopifyProductId}`, 'success');
-                }
-            }
             updateDashboard(); // Dashboard'u güncelle
         } else {
             addLog(`Senkronizasyon hatası: ${result.message}`, 'error');
