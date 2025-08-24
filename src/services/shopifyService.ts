@@ -149,6 +149,12 @@ export async function findProductByHandle(handle: string): Promise<{ id: string;
 
 export async function createShopifyProduct(product: Product, logCallback: (message: string, level: 'info' | 'success' | 'warn') => void) {
     const shopifyApi = getShopifyApiClient();
+    
+    // GQL ID'sini REST ID'sine dönüştür
+    const categoryId = product.product_category?.id ? 
+        `gid://shopify/ProductCategory/${product.product_category.id}` : 
+        undefined;
+
     const payload = {
         product: {
             handle: product.handle,
@@ -159,13 +165,15 @@ export async function createShopifyProduct(product: Product, logCallback: (messa
             tags: product.tags.join(','),
             options: product.options,
             images: product.images,
-            product_category: product.product_category,
+            // Düzeltme: product_category_id'yi doğru formatta gönder
+            product_category_id: categoryId,
             variants: product.variants.map(v => ({
                 price: String(v.price),
                 sku: v.sku,
                 inventory_management: "shopify",
                 inventory_quantity: v.inventory_quantity,
                 option1: v.option1,
+                // Gerekirse diğer option'lar (option2, option3) buraya eklenebilir
             })),
         }
     };
@@ -198,7 +206,8 @@ export async function updateShopifyProduct(
         productUpdatePayload.product.vendor = product.vendor;
         productUpdatePayload.product.product_type = product.product_type;
         productUpdatePayload.product.tags = product.tags.join(',');
-        if (product.product_category) {
+        // Düzeltme: product_category_id'yi GID formatında değil, sadece ID olarak gönder
+        if (product.product_category?.id) {
             productUpdatePayload.product.product_category_id = product.product_category.id;
         }
         updatedFields.push('Detaylar');

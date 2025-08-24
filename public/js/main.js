@@ -48,10 +48,28 @@ function setupEventListeners() {
     document.getElementById('test-xml').addEventListener('click', handleTestXML);
     
     // Sync Page
-    document.getElementById('start-sync').addEventListener('click', () => addLog('Senkronizasyon başlatıldı.', 'info'));
+    document.getElementById('start-sync-btn').addEventListener('click', handleStartSync);
 
     // Google Sheets Page
-    // Add listeners for google auth and sheet generation if they exist
+    document.getElementById('google-auth-btn').addEventListener('click', handleGoogleAuth);
+    document.getElementById('create-sheet-btn').addEventListener('click', handleCreateSheet);
+    
+    // Search Page
+    const searchInput = document.getElementById('product-search-input');
+    const searchResults = document.getElementById('search-results-container');
+    
+    let searchTimeout;
+    searchInput.addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        const query = e.target.value;
+        if (query.length > 2) {
+            searchTimeout = setTimeout(() => {
+                handleProductSearch(query);
+            }, 500); // Kullanıcı yazmayı bıraktıktan 500ms sonra ara
+        } else {
+            searchResults.innerHTML = ''; // Sorgu kısaysa sonuçları temizle
+        }
+    });
 }
 
 function handleLogin(e) {
@@ -92,6 +110,10 @@ function handleNavigation(e) {
     
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById(`page-${page}`).classList.add('active');
+
+    if (page === 'dashboard') {
+        updateDashboard();
+    }
 }
 
 function loadConfigToUI() {
@@ -108,42 +130,59 @@ function loadConfigToUI() {
     if (document.getElementById('xml-url')) {
         document.getElementById('xml-url').value = config.xmlUrl || '';
     }
+    if (document.getElementById('google-sheet-id')) {
+        document.getElementById('google-sheet-id').value = config.googleSheetId || '';
+    }
 }
 
 function handleSaveConfig() {
     const shopifyUrl = document.getElementById('shopify-url').value;
     const shopifyAdminToken = document.getElementById('shopify-admin-token').value;
-    const shopifyStorefrontToken = document.getElementById('shopify-storefront-token').value;
     const xmlUrl = document.getElementById('xml-url').value;
+    const googleSheetId = document.getElementById('google-sheet-id').value;
     
-    window.configService.saveConfig({ shopifyUrl, shopifyAdminToken, shopifyStorefrontToken, xmlUrl });
+    window.configService.saveConfig({ 
+        shopifyUrl, 
+        shopifyAdminToken, 
+        xmlUrl,
+        googleSheetId 
+    });
     
-    showConfigMessage('Ayarlar başarıyla kaydedildi!', 'success');
+    // Backend'e de kaydet
+    fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            SHOPIFY_STORE_URL: shopifyUrl,
+            SHOPIFY_ADMIN_API_TOKEN: shopifyAdminToken,
+            XML_FEED_URL: xmlUrl,
+            GOOGLE_SHEET_ID: googleSheetId
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            showConfigMessage('Ayarlar başarıyla kaydedildi!', 'success');
+        } else {
+            showConfigMessage(`Sunucu tarafında kaydetme hatası: ${data.message}`, 'error');
+        }
+    })
+    .catch(err => {
+        showConfigMessage(`Sunucuya bağlanırken hata: ${err.message}`, 'error');
+    });
+
     updateDashboard(); // Refresh dashboard with new settings
 }
 
 async function handleTestShopify() {
-    const shopifyUrl = document.getElementById('shopify-url').value;
-    const shopifyAdminToken = document.getElementById('shopify-admin-token').value;
-    const shopifyStorefrontToken = document.getElementById('shopify-storefront-token').value;
-    const messageDiv = document.getElementById('config-message');
-
-    if (!shopifyUrl || (!shopifyAdminToken && !shopifyStorefrontToken)) {
-        showConfigMessage('Shopify URL ve en az bir token (Admin veya Storefront) gerekli.', 'error');
-        return;
-    }
-
-    // Temporarily set config for the test
-    window.configService.setConfig({ shopifyUrl, shopifyAdminToken, shopifyStorefrontToken });
-    
     showConfigMessage('Shopify bağlantısı test ediliyor...', 'info');
-
     try {
-        const shopData = await window.shopifyService.checkConnection();
-        if (shopData) {
-            showConfigMessage(`Bağlantı başarılı! Mağaza: ${shopData.name}`, 'success');
+        const result = await fetch('/api/shopify/check');
+        const data = await result.json();
+        if (data.success) {
+            showConfigMessage('Shopify bağlantısı başarılı!', 'success');
         } else {
-            showConfigMessage('Bağlantı başarısız. Bilgileri ve CORS proxy durumunu kontrol edin.', 'error');
+            showConfigMessage(`Bağlantı başarısız: ${data.message}`, 'error');
         }
     } catch (error) {
         showConfigMessage(`Bağlantı hatası: ${error.message}`, 'error');
@@ -151,25 +190,14 @@ async function handleTestShopify() {
 }
 
 async function handleTestXML() {
-    const xmlUrl = document.getElementById('xml-url').value;
-    const messageDiv = document.getElementById('config-message');
-
-    if (!xmlUrl) {
-        showConfigMessage('XML URL alanı dolu olmalı.', 'error');
-        return;
-    }
-
-    // Temporarily set config for the test
-    window.configService.setConfig({ xmlUrl });
-
     showConfigMessage('XML bağlantısı test ediliyor...', 'info');
-
     try {
-        const result = await window.xmlService.checkConnection();
-        if (result.success) {
-            showConfigMessage(`XML bağlantısı başarılı! Kök element: ${result.rootElement}`, 'success');
+        const result = await fetch('/api/xml/check');
+        const data = await result.json();
+        if (data.success) {
+            showConfigMessage('XML bağlantısı başarılı!', 'success');
         } else {
-            showConfigMessage(`Bağlantı başarısız: ${result.message}`, 'error');
+            showConfigMessage(`Bağlantı başarısız: ${data.message}`, 'error');
         }
     } catch (error) {
         showConfigMessage(`Bağlantı hatası: ${error.message}`, 'error');
@@ -196,83 +224,85 @@ async function updateDashboard() {
     const shopifyEmail = document.getElementById('shopify-email');
     const shopifyProducts = document.getElementById('shopify-products');
 
-    if (config.shopifyUrl && (config.shopifyAdminToken || config.shopifyStorefrontToken)) {
-        try {
-            console.log('Shopify bağlantısı kontrol ediliyor...');
-            const shopData = await window.shopifyService.checkConnection();
-            console.log('Shopify shop data:', shopData);
-            
-            if (shopData) {
+    fetch('/api/shopify/info')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
                 shopifyStatus.textContent = 'Bağlandı';
                 shopifyStatus.className = 'status-badge success';
-                shopifyName.textContent = shopData.name || 'N/A';
-                shopifyEmail.textContent = shopData.email || 'N/A';
-                
-                // Get product count
-                console.log('Shopify ürün sayısı getiriliyor...');
-                const productCount = await window.shopifyService.getProductCount();
-                console.log('Shopify ürün sayısı:', productCount);
-                shopifyProducts.textContent = productCount;
+                shopifyName.textContent = data.name || 'N/A';
+                shopifyEmail.textContent = data.email || 'N/A';
+                shopifyProducts.textContent = data.productCount || 0;
             } else {
-                 throw new Error('Shopify\'e bağlanılamadı.');
+                throw new Error('Shopify bilgileri alınamadı.');
             }
-        } catch (e) {
+        })
+        .catch(e => {
             console.error('Shopify dashboard hatası:', e);
             shopifyStatus.textContent = 'Hata';
             shopifyStatus.className = 'status-badge error';
             shopifyName.textContent = 'N/A';
             shopifyEmail.textContent = 'N/A';
             shopifyProducts.textContent = 'N/A';
-        }
-    } else {
-        shopifyStatus.textContent = 'Yapılandırılmadı';
-        shopifyStatus.className = 'status-badge warn';
-    }
+        });
+
 
     // XML Status
     const xmlStatus = document.getElementById('xml-status');
     const xmlSourceUrl = document.getElementById('xml-source-url');
     const xmlProducts = document.getElementById('xml-products');
-    const xmlVariants = document.getElementById('xml-variants');
+    const lastChecked = document.getElementById('xml-last-checked');
 
-    if (config.xmlUrl) {
-        xmlSourceUrl.textContent = config.xmlUrl;
-        try {
-            console.log('XML stats alınıyor...');
-            const stats = await window.xmlService.getXMLStats();
-            console.log('XML stats:', stats);
-            console.log('XML yapısı analizi:', stats.structure);
-            
-            xmlStatus.textContent = 'Bağlandı';
-            xmlStatus.className = 'status-badge success';
-            xmlProducts.textContent = stats.productCount || 0;
-            xmlVariants.textContent = stats.variantCount || 0;
-            
-            // XML yapısını console'da göster
-            if (stats.structure) {
-                console.log('🔍 XML-Shopify Uyumluluk Analizi:');
-                console.log('📦 Ürün Tag:', stats.productTagName);
-                console.log('🏷️  Title alanı:', stats.structure.title);
-                console.log('💰 Price alanı:', stats.structure.price);
-                console.log('🖼️  Image alanı:', stats.structure.image);
-                console.log('📝 Description alanı:', stats.structure.description);
-                console.log('📦 Inventory alanı:', stats.structure.inventory);
-                console.log('🗂️  Category alanı:', stats.structure.category);
-                console.log('🏷️  Tags alanı:', stats.structure.tags);
-                console.log('🔢 SKU alanı:', stats.structure.sku);
+    fetch('/api/xml/stats')
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                xmlStatus.textContent = 'Bağlandı';
+                xmlStatus.className = 'status-badge success';
+                xmlSourceUrl.textContent = data.url || 'N/A';
+                xmlProducts.textContent = data.productCount || 0;
+                lastChecked.textContent = new Date().toLocaleString();
+            } else {
+                throw new Error('XML istatistikleri alınamadı.');
             }
-        } catch (e) {
+        })
+        .catch(e => {
             console.error('XML dashboard hatası:', e);
             xmlStatus.textContent = 'Hata';
             xmlStatus.className = 'status-badge error';
+            xmlSourceUrl.textContent = 'N/A';
             xmlProducts.textContent = 'N/A';
-            xmlVariants.textContent = 'N/A';
-        }
-    } else {
-        xmlStatus.textContent = 'Yapılandırılmadı';
-        xmlStatus.className = 'status-badge warn';
-        xmlSourceUrl.textContent = 'N/A';
-    }
+            lastChecked.textContent = 'N/A';
+        });
+    
+    // Google Status
+    const googleStatus = document.getElementById('google-status');
+    fetch('/api/google/status')
+        .then(res => res.json())
+        .then(data => {
+            if (data.isAuthenticated) {
+                googleStatus.textContent = 'Bağlandı';
+                googleStatus.className = 'status-badge success';
+            } else {
+                googleStatus.textContent = 'Bağlı Değil';
+                googleStatus.className = 'status-badge warn';
+            }
+        })
+        .catch(() => {
+            googleStatus.textContent = 'Hata';
+            googleStatus.className = 'status-badge error';
+        });
+
+    // Son Senkronizasyon Özeti
+    const syncSummary = document.getElementById('last-sync-summary');
+    fetch('/api/sync/summary')
+        .then(res => res.json())
+        .then(data => {
+            syncSummary.innerHTML = data.summary || 'Henüz senkronizasyon yapılmadı.';
+        })
+        .catch(() => {
+            syncSummary.textContent = 'Özet alınamadı.';
+        });
 }
 
 function addLog(message, type = 'info') {
@@ -284,13 +314,128 @@ function addLog(message, type = 'info') {
     logContainer.scrollTop = logContainer.scrollHeight; // Auto-scroll
 }
 
-// Mock/Placeholder services for features not yet implemented
-window.syncService = {
-    setLogCallback: (cb) => { window.logCallback = cb; },
-    runSync: async () => {
-        window.logCallback('Senkronizasyon özelliği henüz tam olarak uygulanmadı.', 'warn');
-        return Promise.resolve();
-    }
-};
+// --- YENİ FONKSİYONLAR ---
 
-window.googleService = {};
+function handleStartSync() {
+    const syncOptions = {
+        full: document.getElementById('sync-full').checked,
+        price: document.getElementById('sync-price').checked,
+        inventory: document.getElementById('sync-inventory').checked,
+        details: document.getElementById('sync-details').checked,
+        images: document.getElementById('sync-images').checked,
+    };
+
+    const logContainer = document.getElementById('sync-log');
+    logContainer.innerHTML = ''; // Önceki logları temizle
+    addLog('Senkronizasyon başlatılıyor...', 'info');
+
+    const eventSource = new EventSource(`/api/sync/start?options=${JSON.stringify(syncOptions)}`);
+
+    eventSource.onmessage = function(event) {
+        const log = JSON.parse(event.data);
+        addLog(log.message, log.level);
+    };
+
+    eventSource.onerror = function(err) {
+        addLog('Sunucuyla bağlantı kesildi veya bir hata oluştu.', 'error');
+        console.error("EventSource failed:", err);
+        eventSource.close();
+    };
+
+    eventSource.addEventListener('close', function() {
+        addLog('Senkronizasyon tamamlandı.', 'info');
+        eventSource.close();
+        updateDashboard(); // Dashboard'u güncelle
+    });
+}
+
+function handleGoogleAuth() {
+    // Backend'deki auth URL'ini alıp yeni pencerede aç
+    fetch('/api/google/auth-url')
+        .then(res => res.json())
+        .then(data => {
+            if (data.url) {
+                window.open(data.url, 'GoogleAuth', 'width=600,height=700');
+            } else {
+                alert('Google kimlik doğrulama URL\'i alınamadı.');
+            }
+        })
+        .catch(err => {
+            alert(`Hata: ${err.message}`);
+        });
+}
+
+async function handleCreateSheet() {
+    const btn = document.getElementById('create-sheet-btn');
+    const status = document.getElementById('sheet-status');
+    
+    btn.disabled = true;
+    status.textContent = 'Google Sheet oluşturuluyor, lütfen bekleyin...';
+    
+    try {
+        const response = await fetch('/api/google/create-sheet', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.success) {
+            status.innerHTML = `Başarılı! <a href="${data.spreadsheetUrl}" target="_blank">Sheet'i Görüntüle</a>`;
+        } else {
+            status.textContent = `Hata: ${data.message}`;
+        }
+    } catch (err) {
+        status.textContent = `İstek gönderilirken hata: ${err.message}`;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function handleProductSearch(query) {
+    const resultsContainer = document.getElementById('search-results-container');
+    resultsContainer.innerHTML = '<div class="loader"></div>'; // Yükleniyor animasyonu
+
+    try {
+        const response = await fetch(`/api/shopify/search?q=${encodeURIComponent(query)}`);
+        const data = await response.json();
+
+        if (data.success && data.products) {
+            renderSearchResults(data.products);
+        } else {
+            resultsContainer.innerHTML = `<p>Arama sırasında hata: ${data.message || 'Bilinmeyen hata'}</p>`;
+        }
+    } catch (error) {
+        resultsContainer.innerHTML = `<p>Arama isteği gönderilemedi: ${error.message}</p>`;
+    }
+}
+
+function renderSearchResults(products) {
+    const resultsContainer = document.getElementById('search-results-container');
+    if (products.length === 0) {
+        resultsContainer.innerHTML = '<p>Aramanızla eşleşen ürün bulunamadı.</p>';
+        return;
+    }
+
+    const productCards = products.map(product => `
+        <div class="product-card">
+            <div class="product-card-header">
+                <h3 class="product-title">${product.title}</h3>
+                <a href="https://${window.configService.getConfig().shopifyUrl}/admin/products/${product.id.split('/').pop()}" target="_blank" class="product-link">Shopify'da Görüntüle</a>
+            </div>
+            <div class="product-card-body">
+                <p><strong>Handle:</strong> ${product.handle}</p>
+                <p><strong>ID:</strong> ${product.id}</p>
+                <h4>Varyantlar (${product.variants.length})</h4>
+                <ul class="variant-list">
+                    ${product.variants.map(v => `
+                        <li>
+                            <strong>${v.title}</strong> - 
+                            SKU: ${v.sku || 'N/A'}, 
+                            Fiyat: ${v.price || 'N/A'}, 
+                            Stok: ${v.inventoryQuantity === null ? 'Takip Edilmiyor' : v.inventoryQuantity}
+                        </li>
+                    `).join('')}
+                </ul>
+            </div>
+        </div>
+    `).join('');
+
+    resultsContainer.innerHTML = productCards;
+}

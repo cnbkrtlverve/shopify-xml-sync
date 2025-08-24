@@ -66,6 +66,7 @@ export async function getProductsFromXml(logCallback: (message: string, level: '
 
         const varyantlarXml = p.Varyantlar?.Varyant;
         if (!varyantlarXml) {
+            logCallback(`'${anaUrunAdi}' için varyant bulunamadı, atlanıyor.`, 'warn');
             continue;
         }
         const varyantlar = Array.isArray(varyantlarXml) ? varyantlarXml : [varyantlarXml];
@@ -111,19 +112,19 @@ export async function getProductsFromXml(logCallback: (message: string, level: '
             remove: /[*+~.()'"!:@]/g
         }) + '-' + getVal(p.id);
 
-        const product: Product = {
-            handle: handle,
+        const newProduct: Product = {
+            handle: slugify(anaUrunAdi, { lower: true, strict: true }),
             title: anaUrunAdi,
             body_html: anaAciklama,
             vendor: anaMarka,
-            product_type: anaKategori.split('>').pop()?.trim() || 'Diğer',
+            product_type: anaKategori.split('>').pop()?.trim() || '',
             tags: anaKategori.split('>').map(t => t.trim()),
             options: [{ name: "Beden", values: optionValues }],
+            product_category: shopifyCategoryId ? { id: shopifyCategoryId.toString() } : undefined,
             variants: productVariants,
             images: productImages,
-            product_category: shopifyCategoryId ? { id: shopifyCategoryId } : undefined,
         };
-        allProducts.push(product);
+        allProducts.push(newProduct);
     }
     logCallback(`XML'den ${allProducts.length} ürün başarıyla işlendi.`, 'info');
     return allProducts;

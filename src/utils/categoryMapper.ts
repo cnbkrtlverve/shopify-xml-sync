@@ -38,7 +38,12 @@ const categoryMap: { [key: string]: string } = {
  * @param categoryPath - XML'den gelen kategori yolu.
  * @returns Eşleşen Shopify kategori ID'si veya undefined.
  */
-export function getShopifyCategoryId(categoryPath: string): string | undefined {
+export function getShopifyCategoryId(categoryPath: string): number | undefined {
     const trimmedPath = categoryPath.trim();
-    return categoryMap[trimmedPath];
+    const gid = categoryMap[trimmedPath];
+    if (gid) {
+        const id = gid.split('/').pop();
+        return id ? parseInt(id, 10) : undefined;
+    }
+    return undefined;
 }
