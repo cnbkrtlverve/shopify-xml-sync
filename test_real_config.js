@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 async function testRealConfig() {
-    const apiUrl = 'https://shopify-xml-sync.netlify.app/.netlify/functions/api';
+    const apiUrl = 'https://vervegranxml.netlify.app/.netlify/functions/api';
     
     console.log('🔍 Real Config Test Başlıyor...\n');
     

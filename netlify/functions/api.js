@@ -46,6 +46,69 @@ exports.handler = async (event, context) => {
       };
     }
 
+    // XML analyze endpoint
+    if (path.includes('/xml/analyze')) {
+      const XML_FEED_URL = 'https://stildiva.sentos.com.tr/xml-sentos-out/1';
+      
+      try {
+        const response = await axios.get(XML_FEED_URL, {
+          timeout: 25000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; ShopifyXMLSync/1.0)',
+            'Accept': 'application/xml, text/xml, */*'
+          }
+        });
+
+        const parsed = await xml2js.parseStringPromise(response.data, {
+          explicitArray: false,
+          trim: true,
+          mergeAttrs: true
+        });
+
+        const products = Array.isArray(parsed.Urunler.Urun) ? parsed.Urunler.Urun : [parsed.Urunler.Urun];
+        
+        // Variant sayısını hesapla
+        let totalVariants = 0;
+        products.forEach(product => {
+          if (product.Varyantlar && product.Varyantlar.Varyant) {
+            const variants = Array.isArray(product.Varyantlar.Varyant) 
+              ? product.Varyantlar.Varyant 
+              : [product.Varyantlar.Varyant];
+            totalVariants += variants.length;
+          } else {
+            totalVariants += 1; // Varyantı yoksa kendisi 1 variant
+          }
+        });
+
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            success: true,
+            products: products.slice(0, 5).map(p => ({
+              id: p.id,
+              name: p.urunismi,
+              price: p.satis_fiyati || p.alis_fiyati,
+              variants: p.Varyantlar ? (Array.isArray(p.Varyantlar.Varyant) ? p.Varyantlar.Varyant.length : 1) : 1
+            })),
+            totalProducts: products.length,
+            totalVariants: totalVariants,
+            xmlFormat: 'Sentos XML Format'
+          })
+        };
+        
+      } catch (error) {
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            error: 'XML analiz hatası: ' + error.message
+          })
+        };
+      }
+    }
+
     // XML stats endpoint
     if (path.includes('/xml/stats')) {
       const XML_FEED_URL = 'https://stildiva.sentos.com.tr/xml-sentos-out/1';
