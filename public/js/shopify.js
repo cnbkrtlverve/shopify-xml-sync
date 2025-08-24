@@ -12,17 +12,13 @@ class ShopifyService {
 
         const targetUrl = `https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`;
         
-        // Using a different, more modern proxy designed for this purpose.
-        const proxyUrl = 'https://proxy.cors.sh/';
+        console.log(`Doğrudan istek gönderiliyor: ${targetUrl}`);
+        console.log("Bu isteğin başarılı olması için tarayıcınızda bir CORS eklentisinin aktif olması gerekir.");
 
-        console.log(`Yeni proxy denemesi: ${proxyUrl}${targetUrl}`);
-        
         try {
-            const response = await fetch(`${proxyUrl}${targetUrl}`, {
+            const response = await fetch(targetUrl, {
                 method: method,
                 headers: {
-                    // This specific proxy requires the API key to be sent in this header.
-                    'x-cors-api-key': 'temp_1234567890', // Use a temporary key for this public proxy
                     'X-Shopify-Access-Token': config.shopifyToken,
                     'Content-Type': 'application/json'
                 },
@@ -31,22 +27,20 @@ class ShopifyService {
 
             if (!response.ok) {
                 const errorText = await response.text();
-                console.error('Proxy Hatası:', `Durum: ${response.status}`, errorText);
-                throw new Error(`Proxy sunucusu hata döndürdü. Durum: ${response.status}`);
+                console.error('Shopify API Hatası:', `Durum: ${response.status}`, errorText);
+                throw new Error(`Shopify API'den geçersiz yanıt alındı. Durum: ${response.status}. CORS eklentinizin aktif olduğundan emin olun.`);
             }
 
             const responseText = await response.text();
             if (!responseText) {
-                console.log('Proxy boş yanıt döndürdü.');
-                return null;
+                return null; // Boş yanıtlar geçerli olabilir
             }
             
-            console.log('Bağlantı başarılı!');
             return JSON.parse(responseText);
 
         } catch (error) {
             console.error('Ağ veya Fetch hatası:', error);
-            throw new Error(`Shopify API'ye ulaşılamadı: ${error.message}`);
+            throw new Error(`Shopify API'ye ulaşılamadı: ${error.message}. Ağ bağlantınızı ve CORS eklentinizi kontrol edin.`);
         }
     }
     
