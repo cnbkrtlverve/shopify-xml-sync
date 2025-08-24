@@ -3,4 +3,4 @@
   
 [[edge_functions]]
   function = "shopify-proxy"
-  path = "/api/shopify-proxy"
+  path = "/shopify-proxy"

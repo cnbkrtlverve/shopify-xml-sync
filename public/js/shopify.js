@@ -22,7 +22,7 @@ class ShopifyService {
 
         // CORS proxy kullanarak Admin API
         const targetUrl = `https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`;
-        const proxyUrl = `/.netlify/functions/shopify-proxy`;
+        const proxyUrl = `/shopify-proxy`;
         
         console.log(`Proxy üzerinden istek gönderiliyor: ${targetUrl}`);
 
