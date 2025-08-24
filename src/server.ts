@@ -48,3 +48,5 @@ if (process.env.NODE_ENV !== 'lambda') {
         console.log('Google Entegrasyonu:', process.env.GOOGLE_CLIENT_ID ? 'Aktif' : 'Pasif');
     });
 }
+
+module.exports = app;

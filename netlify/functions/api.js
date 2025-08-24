@@ -1,5 +1,4 @@
-import serverless from 'serverless-http';
-import app from '../../dist/server.js'; // Derlenmiş sunucu dosyasını doğru yoldan import et
+const serverless = require('serverless-http');
+const app = require('../../dist/server');
 
-// Express app'ini serverless bir fonksiyona çevir
-export const handler = serverless(app);
+module.exports.handler = serverless(app);
