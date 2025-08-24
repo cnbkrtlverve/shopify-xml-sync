@@ -33,8 +33,12 @@ exports.handler = async (event, context) => {
 
     // Shopify check endpoint  
     if (path.includes('/shopify/check')) {
+      console.log('Headers received:', JSON.stringify(headers, null, 2));
+      
       const shopUrl = headers['x-shopify-shop-url'] || headers['X-Shopify-Shop-Url'];
       const accessToken = headers['x-shopify-access-token'] || headers['X-Shopify-Access-Token'];
+      
+      console.log('Parsed values:', { shopUrl, accessToken: accessToken ? 'PRESENT' : 'MISSING' });
       
       if (!shopUrl || !accessToken) {
         return {
@@ -43,7 +47,12 @@ exports.handler = async (event, context) => {
           body: JSON.stringify({
             success: false,
             connected: false,
-            message: 'Shopify bilgileri eksik. Store URL ve Access Token gerekli.'
+            message: 'Shopify bilgileri eksik. Store URL ve Access Token gerekli.',
+            debug: {
+              receivedHeaders: Object.keys(headers),
+              shopUrlFound: !!shopUrl,
+              tokenFound: !!accessToken
+            }
           })
         };
       }
