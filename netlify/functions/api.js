@@ -120,34 +120,47 @@ exports.handler = async (event, context) => {
         };
       }
       
-      try {
-        // Shopify Admin API'ye gerçek çağrı
-        const shopifyResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/shop.json`, {
-          headers: {
-            'X-Shopify-Access-Token': accessToken,
-            'Content-Type': 'application/json'
-          },
-          timeout: 10000
-        });
-        
-        const shopData = shopifyResponse.data.shop;
-        
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({
-            success: true,
-            connected: true,
-            store: shopData.name,
-            email: shopData.email,
-            domain: shopData.domain,
-            productCount: 0, // Bu ayrı API çağrısıyla alınabilir
-            currency: shopData.currency,
-            timezone: shopData.timezone
-          })
-        };
-        
-      } catch (error) {
+        try {
+          // Shopify Admin API'ye gerçek çağrı
+          const shopifyResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/shop.json`, {
+            headers: {
+              'X-Shopify-Access-Token': accessToken,
+              'Content-Type': 'application/json'
+            },
+            timeout: 10000
+          });
+          
+          // Ürün sayısını al
+          let productCount = 0;
+          try {
+            const productsResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/products/count.json`, {
+              headers: {
+                'X-Shopify-Access-Token': accessToken,
+                'Content-Type': 'application/json'
+              },
+              timeout: 5000
+            });
+            productCount = productsResponse.data.count || 0;
+          } catch (countError) {
+            console.log('Ürün sayısı alınamadı:', countError.message);
+          }
+          
+          const shopData = shopifyResponse.data.shop;
+          
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({
+              success: true,
+              connected: true,
+              store: shopData.name,
+              email: shopData.email,
+              domain: shopData.domain,
+              productCount: productCount,
+              currency: shopData.currency,
+              timezone: shopData.timezone
+            })
+          };      } catch (error) {
         return {
           statusCode: 200,
           headers,
@@ -534,16 +547,18 @@ exports.handler = async (event, context) => {
       
       // Config kontrolü - önce header'lara bak, sonra global config'e, sonra env'e
       const config = global.appConfig || {};
-      const SHOPIFY_STORE_URL = event.headers['x-shopify-store-url'] || 
-                               event.headers['X-Shopify-Store-Url'] ||
+      const requestHeaders = event.headers || {};
+      
+      const SHOPIFY_STORE_URL = requestHeaders['x-shopify-shop-url'] || 
+                               requestHeaders['X-Shopify-Shop-Url'] ||
                                config.shopifyUrl || 
                                process.env.SHOPIFY_STORE_URL;
-      const SHOPIFY_ADMIN_API_TOKEN = event.headers['x-shopify-admin-token'] || 
-                                     event.headers['X-Shopify-Admin-Token'] ||
+      const SHOPIFY_ADMIN_API_TOKEN = requestHeaders['x-shopify-access-token'] || 
+                                     requestHeaders['X-Shopify-Access-Token'] ||
                                      config.shopifyAdminToken ||
                                      process.env.SHOPIFY_ADMIN_API_TOKEN;
-      const XML_FEED_URL = event.headers['x-xml-feed-url'] ||
-                          event.headers['X-XML-Feed-Url'] ||
+      const XML_FEED_URL = requestHeaders['x-xml-feed-url'] ||
+                          requestHeaders['X-XML-Feed-Url'] ||
                           config.xmlUrl || 
                           'https://stildiva.sentos.com.tr/xml-sentos-out/1';
 
