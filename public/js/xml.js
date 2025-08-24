@@ -4,120 +4,34 @@ class XMLService {
     constructor() {}
 
     async fetchAndParseXML() {
-        const config = window.configService.getConfig();
-        if (!config.xmlUrl) {
-            throw new Error('XML URL ayarlanmamış.');
-        }
+        console.log('XML verisi sunucu üzerinden (proxy) alınıyor...');
 
-        console.log('XML URL:', config.xmlUrl);
-
-        // Önce doğrudan deneme (eğer CORS yoksa)
         try {
-            console.log('Doğrudan XML erişimi deneniyor...');
-            const response = await fetch(config.xmlUrl);
-            if (response.ok) {
-                const xmlText = await response.text();
-                const parser = new DOMParser();
-                const xmlDoc = parser.parseFromString(xmlText, "application/xml");
-
-                const parserError = xmlDoc.querySelector("parsererror");
-                if (!parserError) {
-                    console.log('Doğrudan XML erişimi başarılı!');
-                    return xmlDoc;
-                }
-            }
-        } catch (error) {
-            console.log('Doğrudan erişim başarısız, proxy deneniyor...', error.message);
-        }
-
-        // Proxy'ler ile deneme (Netlify proxy kaldırıldı - 502 hatası veriyor)
-        const proxies = [
-            // En hızlı ve güvenilir proxy'ler
-            { url: 'https://api.allorigins.win/raw?url=', type: 'path', name: 'AllOrigins' },
-            { url: 'https://cors-anywhere.herokuapp.com/', type: 'path', name: 'CORS Anywhere' },
-            { url: 'https://api.codetabs.com/v1/proxy?quest=', type: 'path', name: 'CodeTabs' }
-        ];
-
-        // Paralel deneme için Promise.race kullan (ilk başarılı olanı al)
-        const proxyPromises = proxies.map(async (proxy) => {
-            const proxyUrl = `${proxy.url}${encodeURIComponent(config.xmlUrl)}`;
-            console.log(`Proxy deneniyor: ${proxy.name}`);
-            
-            const response = await fetch(proxyUrl, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/xml, text/xml, */*'
-                },
-                signal: AbortSignal.timeout(10000) // 10 saniye timeout
-            });
-
-            console.log(`Proxy ${proxy.name} yanıtı:`, response.status);
+            // Kendi sunucumuzdaki proxy endpoint'ine istek atıyoruz.
+            const response = await fetch('/api/xml/proxy');
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorData = await response.json().catch(() => ({ message: 'Proxy sunucusundan geçerli bir JSON yanıtı alınamadı.' }));
+                throw new Error(`Proxy hatası: ${response.status} - ${errorData.message || 'Bilinmeyen sunucu hatası'}`);
             }
 
             const xmlText = await response.text();
-            
-            if (xmlText.length < 10) {
-                throw new Error('XML çok kısa, geçersiz olabilir');
-            }
-
             const parser = new DOMParser();
             const xmlDoc = parser.parseFromString(xmlText, "application/xml");
 
             const parserError = xmlDoc.querySelector("parsererror");
             if (parserError) {
-                throw new Error('XML dosyası ayrıştırılamadı');
+                console.error("XML Parse Hatası:", parserError.textContent);
+                throw new Error('Sunucudan gelen XML verisi ayrıştırılamadı.');
             }
-            
-            console.log(`Proxy ${proxy.name} ile XML başarıyla alındı!`);
-            return { xmlDoc, proxyName: proxy.name };
-        });
 
-        try {
-            // İlk başarılı olan proxy'yi kullan
-            const result = await Promise.any(proxyPromises);
-            console.log(`En hızlı proxy: ${result.proxyName}`);
-            return result.xmlDoc;
+            console.log('Sunucu proxy üzerinden XML başarıyla alındı ve ayrıştırıldı!');
+            return xmlDoc;
+
         } catch (error) {
-            console.error('Tüm proxy\'ler başarısız:', error);
-            
-            // Eğer Promise.any desteklenmiyorsa, sırayla dene
-            for (const proxy of proxies) {
-                try {
-                    const proxyUrl = `${proxy.url}${encodeURIComponent(config.xmlUrl)}`;
-                    console.log(`Fallback: ${proxy.name} deneniyor...`);
-                    
-                    const response = await fetch(proxyUrl, {
-                        method: 'GET',
-                        headers: {
-                            'Accept': 'application/xml, text/xml, */*'
-                        }
-                    });
-
-                    if (!response.ok) continue;
-
-                    const xmlText = await response.text();
-                    if (xmlText.length < 10) continue;
-
-                    const parser = new DOMParser();
-                    const xmlDoc = parser.parseFromString(xmlText, "application/xml");
-
-                    const parserError = xmlDoc.querySelector("parsererror");
-                    if (parserError) continue;
-                    
-                    console.log(`Fallback ${proxy.name} başarılı!`);
-                    return xmlDoc;
-
-                } catch (err) {
-                    console.warn(`Fallback ${proxy.name} başarısız:`, err.message);
-                    continue;
-                }
-            }
+            console.error('XML proxy\'si kullanılırken bir hata oluştu:', error);
+            throw new Error(`XML kaynağına ulaşılamıyor: ${error.message}`);
         }
-
-        throw new Error('Tüm proxy denemeleri başarısız oldu. XML kaynağına ulaşılamıyor.');
     }
 
     async checkConnection() {
