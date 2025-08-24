@@ -8,14 +8,23 @@ async function testRealConfig() {
     // Gerçek config bilgileri (örnek)
     const realConfig = {
         shopify: {
-            shopUrl: 'verve-shop.myshopify.com', // Örnek - gerçek URL'i buraya girin
-            accessToken: 'shpat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx' // Örnek - gerçek token'ı buraya girin
+            shopUrl: 'BURAYA_GERÇEK_STORE_URL', // Örnek: verve-shop.myshopify.com
+            accessToken: 'BURAYA_GERÇEK_TOKEN' // Örnek: shpat_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
         },
         google: {
             clientId: 'google-client-id',
             sheetId: 'google-sheet-id'
         }
     };
+    
+    console.log('⚠️  GERÇEKConfig bilgilerini güncelleyin!');
+    console.log('   shopUrl: sizin-store.myshopify.com');
+    console.log('   accessToken: shpat_gerçek_token');
+    
+    if (realConfig.shopify.shopUrl === 'BURAYA_GERÇEK_STORE_URL') {
+        console.log('❌ Önce gerçek config bilgilerini girin!');
+        return;
+    }
     
     try {
         // 1. Config kaydetme testi
