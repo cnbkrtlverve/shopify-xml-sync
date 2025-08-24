@@ -4,32 +4,36 @@ class XMLService {
     constructor() {}
 
     async fetchAndParseXML() {
-        const xmlProxyUrl = '/xml-feed';
-        console.log(`XML verisi Netlify proxy üzerinden alınıyor: ${xmlProxyUrl}`);
+        console.log('XML verisi Netlify proxy ile alınıyor...');
 
         try {
-            const response = await fetch(xmlProxyUrl);
-
+            const response = await fetch('/xml-feed');
+            
             if (!response.ok) {
-                throw new Error(`Netlify proxy hatası: ${response.status} ${response.statusText}`);
+                throw new Error(`HTTP hatası: ${response.status}`);
             }
 
             const xmlText = await response.text();
+            
+            // Basit kontrol - XML mi yoksa HTML mi?
+            if (xmlText.includes('<html') || xmlText.includes('<!DOCTYPE')) {
+                throw new Error('Proxy HTML döndürdü, XML bekleniyor');
+            }
+            
             const parser = new DOMParser();
             const xmlDoc = parser.parseFromString(xmlText, "application/xml");
 
             const parserError = xmlDoc.querySelector("parsererror");
             if (parserError) {
-                console.error("XML Parse Hatası:", parserError.textContent);
-                throw new Error('Proxy üzerinden gelen XML verisi ayrıştırılamadı.');
+                throw new Error('XML ayrıştırma hatası');
             }
 
-            console.log('Netlify proxy üzerinden XML başarıyla alındı ve ayrıştırıldı!');
+            console.log('XML başarıyla alındı');
             return xmlDoc;
 
         } catch (error) {
-            console.error('Netlify XML proxy\'si kullanılırken bir hata oluştu:', error);
-            throw new Error(`XML kaynağına ulaşılamıyor: ${error.message}`);
+            console.error('XML hatası:', error.message);
+            throw new Error(`XML yüklenemedi: ${error.message}`);
         }
     }
 

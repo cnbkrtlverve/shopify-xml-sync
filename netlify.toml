@@ -3,26 +3,19 @@
   functions = "netlify/functions"
   publish = "public"
 
-# API isteklerini Netlify Function'a yönlendirir.
+# XML için basit proxy
+[[redirects]]
+  from = "/xml-feed"
+  to = "https://stildiva.sentos.com.tr/xml-sentos-out/1"
+  status = 200
+
+# API istekleri
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api/:splat"
   status = 200
 
-# Diğer tüm istekleri ana sayfaya yönlendirir (SPA için).
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
-
-# SPA (Single Page App) için catch-all kuralı
-# API dışındaki tüm istekleri index.html'e yönlendirir
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/api/:splat"
-  status = 200
-
+# SPA fallback
 [[redirects]]
   from = "/*"
   to = "/index.html"
