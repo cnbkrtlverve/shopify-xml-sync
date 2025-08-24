@@ -1,0 +1,60 @@
+{
+  "xml_structure": {
+    "root": "Urunler",
+    "product_node": "Urun",
+    "total_products": 1623,
+    "total_variants": 10283
+  },
+  "product_fields": [
+    "id",
+    "stok_kodu",
+    "barkod",
+    "kategori_id",
+    "kategori_ismi",
+    "alt_kategori_1",
+    "alt_kategori_2",
+    "alt_kategori_3",
+    "urunismi",
+    "alt_baslik",
+    "detayaciklama",
+    "tedarikci",
+    "stok",
+    "marka",
+    "kdv",
+    "desi",
+    "doviz_kuru",
+    "alis_fiyati",
+    "satis_fiyati",
+    "indirimli_fiyat",
+    "varyant_isimleri",
+    "renk_isimleri",
+    "resimler",
+    "Varyantlar"
+  ],
+  "variant_structure": {
+    "Varyant_isim": "Beden",
+    "Varyant_deger": "48",
+    "renk": "Siyah",
+    "stok_kodu": "144236Siyah-M47-R15",
+    "barkod": "144236-SYH-48",
+    "stok": "0",
+    "resimler": {
+      "resim": [
+        "https://stildiva.sentos.com.tr/urunres/resim-2025-08-18-190902469.png",
+        "https://stildiva.sentos.com.tr/urunres/resim-2025-08-18-190856167.png",
+        "https://stildiva.sentos.com.tr/urunres/1-org-zoom-jpgae31eabf-8dbb-3714-844e-bee5e9375c22-175533747168a052ff60191.jpg",
+        "https://stildiva.sentos.com.tr/urunres/resim-2025-08-18-190908041.png",
+        "https://stildiva.sentos.com.tr/urunres/e51b7f32-7d35-46ae-8791-0fd1dfea6b74.jpg",
+        "https://stildiva.sentos.com.tr/urunres/resim-2025-08-18-190922351.png",
+        "https://stildiva.sentos.com.tr/urunres/1-org-zoom-jpgd4ff5665-af3d-30a8-83a3-9a21d7cf25f7-175533747068a052fef40ce.jpg"
+      ]
+    }
+  },
+  "sample_product": {
+    "id": "1781",
+    "name": "Büyük Beden Cepli Bol Kesim Likralı Jarse Pantolon 144236",
+    "price": "0,00",
+    "stock": "259",
+    "variants": 6
+  }
+}

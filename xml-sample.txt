@@ -1,0 +1,76 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Urunler>
+  <Urun>
+    <id>1781</id>
+    <stok_kodu><![CDATA[144236Siyah]]></stok_kodu>
+    <barkod/>
+    <kategori_id>33</kategori_id>
+    <kategori_ismi><![CDATA[Giyim > Büyük Beden > Alt Giyim > Pantolon]]></kategori_ismi>
+    <alt_kategori_1/>
+    <alt_kategori_2/>
+    <alt_kategori_3/>
+    <urunismi><![CDATA[Büyük Beden Cepli Bol Kesim Likralı Jarse Pantolon 144236]]></urunismi>
+    <alt_baslik><![CDATA[Büyük Beden Cepli Bol Kesim Likralı Jarse Pantolon 144236]]></alt_baslik>
+    <detayaciklama><![CDATA[<p>Büyük Beden Cepli Bol Kesim Likralı Jarse Pantolon 144236<br />
+ </p>
+
+<p><strong>Özellikler:</strong></p>
+
+<ul>
+	<li>
+	<p><strong>Manken Boyu:</strong> 177 cm</p>
+	</li>
+	<li>
+	<p><strong>Manken Ağırlığı:</strong> -</p>
+	</li>
+	<li>
+	<p><strong>Manken Bedeni:</strong> 44</p>
+	</li>
+	<li>
+	<p><strong>Kumaş İçeriği:</strong> %95 Viskoz, %5 Elastan</p>
+	</li>
+	<li>
+	<p><strong>Kumaş Türü:</strong> Viskon Jarse</p>
+	</li>
+	<li>
+	<p><strong>Model Detayı:</strong> Beli Lastikli, Yanları Cepli, Külot Pantolon Kesim</p>
+	</li>
+	<li>
+	<p><strong>Paça İç Boyu:</strong> Yaklaşık 46 cm</p>
+	</li>
+</ul>
+
+<p><em>Tüm ürünlerimiz esnek kumaştır.</em><br />
+<em>Tüm ürünlerimiz büyük beden ürünlerdir.</em><br />
+ </p>
+
+<p><strong>Kalıp:</strong></p>
+
+<p>Beli lastikli ve rahat kesimli, paçalara doğru genişleyen <strong>pantolon</strong> kalıbına sahiptir. Dökümlü kumaşı ve bol kesimi sayesinde ferah bir kullanım ve maksimum hareket özgürlüğü sunar.</p>
+
+<p><strong>Moda Notu:</strong></p>
+
+<p>Gündelik gardırobunuza bu sade ve rahat formdaki siyah pantolon ile konfor katın. Yumuşacık ve esnek viskon jarse kumaşı ile konforlu lastikli beli sayesinde gün boyu rahatlık sunar. İçine sokacağınız basic beyaz bir tişört ve spor ayakkabılarınızla kombinleyerek zahmetsiz bir günlük stil yaratın. Mevsim boyunca size eşlik edecek, gardırobunuzun temel ve kurtarıcı parçası.</p>]]></detayaciklama>
+    <tedarikci/>
+    <stok>259</stok>
+    <marka><![CDATA[Stil Diva]]></marka>
+    <kdv>10.00</kdv>
+    <desi>1.0000</desi>
+    <doviz_kuru>TL</doviz_kuru>
+    <alis_fiyati>190,00</alis_fiyati>
+    <satis_fiyati>0,00</satis_fiyati>
+    <indirimli_fiyat>0,00</indirimli_fiyat>
+    <varyant_isimleri><![CDATA[48(Beden),46(Beden),44(Beden),42(Beden),40(Beden),66 - 68(Beden),50 - 52(Beden),54 - 56(Beden),58 - 60(Beden),62 - 64(Beden)]]></varyant_isimleri>
+    <renk_isimleri><![CDATA[Siyah]]></renk_isimleri>
+    <resimler/>
+    <Varyantlar>
+      <Varyant>
+        <Varyant_isim><![CDATA[Beden]]></Varyant_isim>
+        <Varyant_deger><![CDATA[48]]></Varyant_deger>
+        <renk><![CDATA[Siyah]]></renk>
+        <stok_kodu><![CDATA[144236Siyah-M47-R15]]></stok_kodu>
+        <barkod><![CDATA[144236-SYH-48]]></barkod>
+        <stok>0</stok>
+        <resimler>
+          <resim>https://stildiva.sentos.com.tr/urunres/resim-2025-08-18-190902469.png</resim>
+          <resim>https://stildiva.sentos.com.tr/urunres/resim-
