@@ -105,16 +105,21 @@
                 <div class="sync-controls">
                     <fieldset class="sync-options">
                         <legend>Senkronizasyon Seçenekleri</legend>
-                        <label><input type="checkbox" id="sync-full" checked> Tam Senkronizasyon</label>
-                        <label><input type="checkbox" id="sync-price"> Sadece Fiyat</label>
-                        <label><input type="checkbox" id="sync-inventory"> Sadece Stok</label>
+                        <label><input type="checkbox" id="sync-full" checked disabled> Tam Senkronizasyon (Şu an sadece bu destekleniyor)</label>
+                        <!-- <label><input type="checkbox" id="sync-price"> Sadece Fiyat</label>
+                        <label><input type="checkbox"id="sync-inventory"> Sadece Stok</label>
                         <label><input type="checkbox" id="sync-details"> Sadece Detaylar (Başlık, Açıklama vb.)</label>
-                        <label><input type="checkbox" id="sync-images"> Sadece Resimler</label>
+                        <label><input type="checkbox" id="sync-images"> Sadece Resimler</label> -->
                     </fieldset>
                     <div class="sync-buttons">
                         <button id="start-sync-btn" class="button-primary">Senkronizasyonu Başlat</button>
+                        <button id="stop-sync-btn" class="button-danger" style="display: none;">Durdur</button>
                         <button id="clean-test-btn" class="button-secondary" style="background-color: #ff5722; color: white;">Test Ürünlerini Temizle</button>
                     </div>
+                </div>
+                <div id="sync-progress-container" class="progress-container" style="display: none;">
+                    <div id="sync-progress-bar" class="progress-bar"></div>
+                    <div id="sync-progress-text" class="progress-text">0%</div>
                 </div>
                 <div id="sync-log" class="log-container"></div>
             </div>
