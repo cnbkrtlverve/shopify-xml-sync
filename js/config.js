@@ -1,56 +1,46 @@
 // config.js - Yapılandırma yönetimi
-class Config {
+class ConfigService {
     constructor() {
+        this.config = {};
         this.loadConfig();
     }
     
     loadConfig() {
-        this.shopifyStoreUrl = localStorage.getItem('shopify_store_url') || '';
-        this.shopifyToken = localStorage.getItem('shopify_token') || '';
-        this.xmlFeedUrl = localStorage.getItem('xml_feed_url') || '';
+        this.config = {
+            shopifyUrl: localStorage.getItem('shopify_url') || '',
+            shopifyToken: localStorage.getItem('shopify_token') || '',
+            xmlUrl: localStorage.getItem('xml_url') || ''
+        };
     }
     
-    saveConfig(shopifyStoreUrl, shopifyToken, xmlFeedUrl) {
-        localStorage.setItem('shopify_store_url', shopifyStoreUrl);
-        localStorage.setItem('shopify_token', shopifyToken);
-        localStorage.setItem('xml_feed_url', xmlFeedUrl);
-        
-        this.shopifyStoreUrl = shopifyStoreUrl;
-        this.shopifyToken = shopifyToken;
-        this.xmlFeedUrl = xmlFeedUrl;
+    saveConfig(config) {
+        localStorage.setItem('shopify_url', config.shopifyUrl);
+        localStorage.setItem('shopify_token', config.shopifyToken);
+        localStorage.setItem('xml_url', config.xmlUrl);
+        this.loadConfig(); // Update internal state
+    }
+    
+    setConfig(config) {
+        if (config.shopifyUrl) this.config.shopifyUrl = config.shopifyUrl;
+        if (config.shopifyToken) this.config.shopifyToken = config.shopifyToken;
+        if (config.xmlUrl) this.config.xmlUrl = config.xmlUrl;
+    }
+    
+    getConfig() {
+        return this.config;
     }
     
     getShopifyHeaders() {
         return {
-            'X-Shopify-Access-Token': this.shopifyToken,
+            'X-Shopify-Access-Token': this.config.shopifyToken,
             'Content-Type': 'application/json'
         };
     }
     
-    getShopifyApiUrl() {
-        return `https://${this.shopifyStoreUrl}/admin/api/2024-07`;
-    }
-    
     isConfigured() {
-        return this.shopifyStoreUrl && this.shopifyToken && this.xmlFeedUrl;
-    }
-    
-    // Yeni metod - geçici config için
-    setConfig(config) {
-        if (config.shopifyUrl) this.shopifyStoreUrl = config.shopifyUrl;
-        if (config.shopifyToken) this.shopifyToken = config.shopifyToken;
-        if (config.xmlUrl) this.xmlFeedUrl = config.xmlUrl;
-    }
-    
-    getConfig() {
-        return {
-            shopifyUrl: this.shopifyStoreUrl,
-            shopifyToken: this.shopifyToken,
-            xmlUrl: this.xmlFeedUrl
-        };
+        return this.config.shopifyUrl && this.config.shopifyToken && this.config.xmlUrl;
     }
 }
 
 // Global config instance
-window.appConfig = new Config();
-window.configService = window.appConfig; // Alias için
+window.configService = new ConfigService();

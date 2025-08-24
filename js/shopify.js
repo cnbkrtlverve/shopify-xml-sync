@@ -4,34 +4,15 @@ class ShopifyService {
         this.apiVersion = '2024-07';
     }
     
-    getTempConfig() {
-        // Test sırasında geçici config kullan
-        const saved = localStorage.getItem('temp_shopify_config');
-        if (saved) {
-            return JSON.parse(saved);
-        }
-        
-        // config.js'den al
-        if (window.configService && window.configService.isConfigured()) {
-            const config = window.configService.getConfig();
-            return {
-                shopifyUrl: config.shopifyUrl,
-                shopifyToken: config.shopifyToken
-            };
-        }
-        
-        return {};
-    }
-    
     async makeRequest(endpoint, method = 'GET', data = null) {
-        const tempConfig = this.getTempConfig();
-        if (!tempConfig.shopifyUrl || !tempConfig.shopifyToken) {
+        const config = window.configService.getConfig();
+        if (!config.shopifyUrl || !config.shopifyToken) {
             throw new Error('Shopify ayarları eksik');
         }
         
-        const url = `https://${tempConfig.shopifyUrl}/admin/api/2024-07${endpoint}`;
+        const url = `https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`;
         const headers = {
-            'X-Shopify-Access-Token': tempConfig.shopifyToken,
+            'X-Shopify-Access-Token': config.shopifyToken,
             'Content-Type': 'application/json'
         };
         

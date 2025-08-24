@@ -160,10 +160,10 @@ function handleSaveConfig() {
 }
 
 async function handleTestShopify() {
-    const shopifyStoreUrl = document.getElementById('shopify-store-url')?.value || 'c1grp2-yr.myshopify.com';
-    const shopifyToken = document.getElementById('shopify-token')?.value || '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';
+    const shopifyUrl = document.getElementById('shopify-url')?.value;
+    const shopifyToken = document.getElementById('shopify-token')?.value;
     
-    if (!shopifyStoreUrl || !shopifyToken) {
+    if (!shopifyUrl || !shopifyToken) {
         showConfigMessage('Shopify ayarları eksik!', 'error');
         return;
     }
@@ -171,17 +171,16 @@ async function handleTestShopify() {
     showConfigMessage('Shopify bağlantısı test ediliyor...', 'info');
     
     try {
-        // Geçici config kaydet
-        localStorage.setItem('temp_shopify_config', JSON.stringify({
-            shopifyUrl: shopifyStoreUrl,
+        // Config'i geçici olarak ayarla
+        window.configService.setConfig({
+            shopifyUrl: shopifyUrl,
             shopifyToken: shopifyToken
-        }));
+        });
         
         const result = await window.shopifyService.checkConnection();
         
         if (result) {
             showConfigMessage(`✅ Shopify bağlantısı başarılı! Mağaza: ${result.name}`, 'success');
-            console.log('Shop info:', result);
         } else {
             showConfigMessage('❌ Shopify bağlantı hatası: Shop bilgisi alınamadı', 'error');
         }
@@ -192,9 +191,9 @@ async function handleTestShopify() {
 }
 
 async function handleTestXML() {
-    const xmlFeedUrl = document.getElementById('xml-feed-url')?.value || 'https://stildiva.sentos.com.tr/xml-sentos-out/1';
+    const xmlUrl = document.getElementById('xml-url')?.value;
     
-    if (!xmlFeedUrl) {
+    if (!xmlUrl) {
         showConfigMessage('XML URL eksik!', 'error');
         return;
     }
@@ -202,9 +201,9 @@ async function handleTestXML() {
     showConfigMessage('XML bağlantısı test ediliyor...', 'info');
     
     try {
-        // Config kaydet
+        // Config'i geçici olarak ayarla
         window.configService.setConfig({
-            xmlUrl: xmlFeedUrl
+            xmlUrl: xmlUrl
         });
         
         const xmlData = await window.xmlService.fetchXMLData();
@@ -215,7 +214,6 @@ async function handleTestXML() {
             // Parse test
             try {
                 const products = await window.xmlService.parseXMLToProducts(xmlData);
-                console.log('Parsed products:', products.slice(0, 3)); // İlk 3 ürünü göster
                 showConfigMessage(`✅ XML parse başarılı! ${products.length} ürün bulundu`, 'success');
             } catch (parseError) {
                 showConfigMessage(`⚠️ XML alındı ancak parse hatası: ${parseError.message}`, 'warning');
