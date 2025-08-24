@@ -48,6 +48,3 @@ if (process.env.NODE_ENV !== 'lambda') {
         console.log('Google Entegrasyonu:', process.env.GOOGLE_CLIENT_ID ? 'Aktif' : 'Pasif');
     });
 }
-
-// Sunucuyu dışa aktar (serverless ortamlar için)
-export default app;
