@@ -1,13 +1,18 @@
 exports.handler = async (event, context) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Shopify-Store-Url, X-Shopify-Admin-Token, X-XML-Feed-Url',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE',
     'Content-Type': 'application/json'
   };
 
   if (event.httpMethod === 'OPTIONS') {
-}
+    return {
+      statusCode: 200,
+      headers,
+      body: ''
+    };
+  }
 
 async function handleConfig(action, event, headers) {
   try {
@@ -85,9 +90,6 @@ async function handleDebug(action, event, headers) {
     };
   }
 }
-
-async function handleShopify(action, event, headers) { return { statusCode: 200, headers, body: '' };
-  }
 
   try {
     const path = event.path.replace('/api/', '');
