@@ -10,17 +10,18 @@ class ShopifyService {
             throw new Error('Shopify ayarları eksik. Lütfen yapılandırma sayfasını kontrol edin.');
         }
 
-        const targetUrl = `https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`;
+        const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+        const targetUrl = `${proxyUrl}https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`;
         
-        console.log(`Doğrudan istek gönderiliyor: ${targetUrl}`);
-        console.log("Bu isteğin başarılı olması için tarayıcınızda bir CORS eklentisinin aktif olması gerekir.");
+        console.log(`Proxy üzerinden istek gönderiliyor: ${targetUrl}`);
 
         try {
             const response = await fetch(targetUrl, {
                 method: method,
                 headers: {
                     'X-Shopify-Access-Token': config.shopifyToken,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest' // Proxy için gerekli
                 },
                 body: data ? JSON.stringify(data) : null
             });
@@ -28,7 +29,7 @@ class ShopifyService {
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error('Shopify API Hatası:', `Durum: ${response.status}`, errorText);
-                throw new Error(`Shopify API'den geçersiz yanıt alındı. Durum: ${response.status}. CORS eklentinizin aktif olduğundan emin olun.`);
+                throw new Error(`Shopify API'den geçersiz yanıt alındı. Durum: ${response.status}.`);
             }
 
             const responseText = await response.text();
@@ -40,7 +41,7 @@ class ShopifyService {
 
         } catch (error) {
             console.error('Ağ veya Fetch hatası:', error);
-            throw new Error(`Shopify API'ye ulaşılamadı: ${error.message}. Ağ bağlantınızı ve CORS eklentinizi kontrol edin.`);
+            throw new Error(`Shopify API'ye ulaşılamadı: ${error.message}. Ağ bağlantınızı kontrol edin.`);
         }
     }
     
