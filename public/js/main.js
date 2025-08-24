@@ -11,11 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.googleService = window.googleService || {};
 
     // Check login state and setup UI
-    // Demo için otomatik login yapalım
-    if (!window.authService.isLoggedIn()) {
-        // Otomatik giriş yap
-        window.authService.login('admin', '1234');
-    }
+    // Demo için otomatik login yapalım - zorla giriş yap
+    sessionStorage.setItem('isLoggedIn', 'true');
     
     if (window.authService.isLoggedIn()) {
         document.getElementById('app-container').style.display = 'block';
@@ -78,7 +75,12 @@ function handleLogout() {
     document.getElementById('app-container').style.display = 'none';
     document.getElementById('login-container').style.display = 'flex';
     // Clear sensitive UI data on logout
-    document.getElementById('shopify-token').value = '';
+    if (document.getElementById('shopify-admin-token')) {
+        document.getElementById('shopify-admin-token').value = '';
+    }
+    if (document.getElementById('shopify-storefront-token')) {
+        document.getElementById('shopify-storefront-token').value = '';
+    }
 }
 
 function handleNavigation(e) {
@@ -97,8 +99,11 @@ function loadConfigToUI() {
     if (document.getElementById('shopify-url')) {
         document.getElementById('shopify-url').value = config.shopifyUrl || '';
     }
-    if (document.getElementById('shopify-token')) {
-        document.getElementById('shopify-token').value = config.shopifyToken || '';
+    if (document.getElementById('shopify-admin-token')) {
+        document.getElementById('shopify-admin-token').value = config.shopifyAdminToken || '';
+    }
+    if (document.getElementById('shopify-storefront-token')) {
+        document.getElementById('shopify-storefront-token').value = config.shopifyStorefrontToken || '';
     }
     if (document.getElementById('xml-url')) {
         document.getElementById('xml-url').value = config.xmlUrl || '';
@@ -107,10 +112,11 @@ function loadConfigToUI() {
 
 function handleSaveConfig() {
     const shopifyUrl = document.getElementById('shopify-url').value;
-    const shopifyToken = document.getElementById('shopify-token').value;
+    const shopifyAdminToken = document.getElementById('shopify-admin-token').value;
+    const shopifyStorefrontToken = document.getElementById('shopify-storefront-token').value;
     const xmlUrl = document.getElementById('xml-url').value;
     
-    window.configService.saveConfig({ shopifyUrl, shopifyToken, xmlUrl });
+    window.configService.saveConfig({ shopifyUrl, shopifyAdminToken, shopifyStorefrontToken, xmlUrl });
     
     showConfigMessage('Ayarlar başarıyla kaydedildi!', 'success');
     updateDashboard(); // Refresh dashboard with new settings
@@ -118,16 +124,17 @@ function handleSaveConfig() {
 
 async function handleTestShopify() {
     const shopifyUrl = document.getElementById('shopify-url').value;
-    const shopifyToken = document.getElementById('shopify-token').value;
+    const shopifyAdminToken = document.getElementById('shopify-admin-token').value;
+    const shopifyStorefrontToken = document.getElementById('shopify-storefront-token').value;
     const messageDiv = document.getElementById('config-message');
 
-    if (!shopifyUrl || !shopifyToken) {
-        showConfigMessage('Shopify URL ve Token alanları dolu olmalı.', 'error');
+    if (!shopifyUrl || (!shopifyAdminToken && !shopifyStorefrontToken)) {
+        showConfigMessage('Shopify URL ve en az bir token (Admin veya Storefront) gerekli.', 'error');
         return;
     }
 
     // Temporarily set config for the test
-    window.configService.setConfig({ shopifyUrl, shopifyToken });
+    window.configService.setConfig({ shopifyUrl, shopifyAdminToken, shopifyStorefrontToken });
     
     showConfigMessage('Shopify bağlantısı test ediliyor...', 'info');
 

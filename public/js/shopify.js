@@ -6,13 +6,18 @@ class ShopifyService {
     
     async makeRequest(endpoint, method = 'GET', data = null) {
         const config = window.configService.getConfig();
-        if (!config.shopifyUrl || !config.shopifyToken) {
-            throw new Error('Shopify ayarları eksik. Lütfen yapılandırma sayfasını kontrol edin.');
+        if (!config.shopifyUrl) {
+            throw new Error('Shopify URL eksik. Lütfen yapılandırma sayfasını kontrol edin.');
         }
 
-        // Eğer shop.json ise Storefront API kullan (CORS yok)
-        if (endpoint === '/shop.json') {
+        // Eğer shop.json ise ve Storefront token varsa, Storefront API kullan (CORS yok)
+        if (endpoint === '/shop.json' && config.shopifyStorefrontToken) {
             return await this.getShopInfoViaStorefront(config);
+        }
+
+        // Admin API için Admin token gerekli
+        if (!config.shopifyAdminToken) {
+            throw new Error('Shopify Admin Access Token eksik. Lütfen yapılandırma sayfasını kontrol edin.');
         }
 
         // Diğer istekler için Admin API
@@ -25,7 +30,7 @@ class ShopifyService {
             const response = await fetch(targetUrl, {
                 method: method,
                 headers: {
-                    'X-Shopify-Access-Token': config.shopifyToken,
+                    'X-Shopify-Access-Token': config.shopifyAdminToken,
                     'Content-Type': 'application/json'
                 },
                 body: data ? JSON.stringify(data) : null
@@ -74,7 +79,7 @@ class ShopifyService {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Shopify-Storefront-Access-Token': config.shopifyToken // Storefront token kullanın
+                    'X-Shopify-Storefront-Access-Token': config.shopifyStorefrontToken
                 },
                 body: JSON.stringify({ query })
             });
