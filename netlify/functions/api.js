@@ -1035,7 +1035,7 @@ async function handleSync(action, event, headers) {
                 shopifyProductId: response.data.product?.id
               }
             })
-          });
+          };
           
         } catch (shopifyError) {
           console.error('Shopify API hatası:', shopifyError.response?.data || shopifyError.message);
@@ -1055,7 +1055,7 @@ async function handleSync(action, event, headers) {
                 }
               }
             })
-          });
+          };
         }
         
       } catch (syncError) {
