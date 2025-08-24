@@ -14,6 +14,18 @@ app.get('/api/test', (req, res) => {
     res.json({ message: 'API çalışıyor', time: new Date().toISOString() });
 });
 
+// Debug endpoint - sadece ortam değişkenlerinin varlığını kontrol et
+app.get('/api/debug/env', (req, res) => {
+    const envKeys = Object.keys(process.env).filter(key => key.includes('SHOPIFY'));
+    res.json({
+        message: 'Ortam değişkenleri kontrolü',
+        shopifyKeys: envKeys,
+        hasShopifyStoreUrl: !!process.env.SHOPIFY_STORE_URL,
+        hasShopifyApiKey: !!process.env.SHOPIFY_API_KEY,
+        totalEnvKeys: Object.keys(process.env).length
+    });
+});
+
 // Shopify info endpoint
 app.get('/api/shopify/info', (req, res) => {
     try {
