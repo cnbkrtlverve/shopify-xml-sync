@@ -10,18 +10,17 @@ class ShopifyService {
             throw new Error('Shopify ayarları eksik. Lütfen yapılandırma sayfasını kontrol edin.');
         }
 
-        const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
-        const targetUrl = `${proxyUrl}https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`;
+        const targetUrl = `https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`;
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
         
-        console.log(`Proxy üzerinden istek gönderiliyor: ${targetUrl}`);
+        console.log(`Proxy üzerinden istek gönderiliyor: ${proxyUrl}`);
 
         try {
-            const response = await fetch(targetUrl, {
+            const response = await fetch(proxyUrl, {
                 method: method,
                 headers: {
                     'X-Shopify-Access-Token': config.shopifyToken,
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest' // Proxy için gerekli
+                    'Content-Type': 'application/json'
                 },
                 body: data ? JSON.stringify(data) : null
             });
@@ -29,7 +28,7 @@ class ShopifyService {
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error('Shopify API Hatası:', `Durum: ${response.status}`, errorText);
-                throw new Error(`Shopify API'den geçersiz yanıt alındı. Durum: ${response.status}.`);
+                throw new Error(`Proxy sunucusu hata döndürdü. Durum: ${response.status}.`);
             }
 
             const responseText = await response.text();
