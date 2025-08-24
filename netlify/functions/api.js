@@ -7,7 +7,45 @@ exports.handler = async (event, context) => {
   };
 
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers, body: '' };
+}
+
+async function handleDebug(action, event, headers) {
+  try {
+    if (action === 'env') {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          environment: {
+            SHOPIFY_STORE_URL: process.env.SHOPIFY_STORE_URL || 'NOT_SET',
+            SHOPIFY_ADMIN_API_TOKEN: process.env.SHOPIFY_ADMIN_API_TOKEN ? 'SET' : 'NOT_SET',
+            XML_FEED_URL: process.env.XML_FEED_URL || 'NOT_SET',
+            NODE_ENV: process.env.NODE_ENV || 'NOT_SET',
+            netlifyContext: event.headers['x-nf-request-id'] ? 'NETLIFY' : 'LOCAL'
+          }
+        })
+      };
+    }
+
+    return {
+      statusCode: 404,
+      headers,
+      body: JSON.stringify({ error: 'Debug action bulunamadı' })
+    };
+  } catch (error) {
+    console.error('Debug handler error:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ 
+        error: 'Debug handler hatası',
+        message: error.message
+      })
+    };
+  }
+}
+
+async function handleShopify(action, event, headers) { return { statusCode: 200, headers, body: '' };
   }
 
   try {
@@ -18,6 +56,9 @@ exports.handler = async (event, context) => {
 
     console.log('API Request:', { path, service, action, method: event.httpMethod });
 
+    if (service === 'debug') {
+      return await handleDebug(action, event, headers);
+    }
     if (service === 'shopify') {
       return await handleShopify(action, event, headers);
     }
