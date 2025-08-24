@@ -209,10 +209,10 @@ async function updateDashboard() {
                 shopifyEmail.textContent = shopData.email || 'N/A';
                 
                 // Get product count
-                console.log('Shopify ürünleri getiriliyor...');
-                const products = await window.shopifyService.getAllProducts();
-                console.log('Shopify products:', products);
-                shopifyProducts.textContent = products.length;
+                console.log('Shopify ürün sayısı getiriliyor...');
+                const productCount = await window.shopifyService.getProductCount();
+                console.log('Shopify ürün sayısı:', productCount);
+                shopifyProducts.textContent = productCount;
             } else {
                  throw new Error('Shopify\'e bağlanılamadı.');
             }
@@ -241,10 +241,26 @@ async function updateDashboard() {
             console.log('XML stats alınıyor...');
             const stats = await window.xmlService.getXMLStats();
             console.log('XML stats:', stats);
+            console.log('XML yapısı analizi:', stats.structure);
+            
             xmlStatus.textContent = 'Bağlandı';
             xmlStatus.className = 'status-badge success';
             xmlProducts.textContent = stats.productCount || 0;
             xmlVariants.textContent = stats.variantCount || 0;
+            
+            // XML yapısını console'da göster
+            if (stats.structure) {
+                console.log('🔍 XML-Shopify Uyumluluk Analizi:');
+                console.log('📦 Ürün Tag:', stats.productTagName);
+                console.log('🏷️  Title alanı:', stats.structure.title);
+                console.log('💰 Price alanı:', stats.structure.price);
+                console.log('🖼️  Image alanı:', stats.structure.image);
+                console.log('📝 Description alanı:', stats.structure.description);
+                console.log('📦 Inventory alanı:', stats.structure.inventory);
+                console.log('🗂️  Category alanı:', stats.structure.category);
+                console.log('🏷️  Tags alanı:', stats.structure.tags);
+                console.log('🔢 SKU alanı:', stats.structure.sku);
+            }
         } catch (e) {
             console.error('XML dashboard hatası:', e);
             xmlStatus.textContent = 'Hata';

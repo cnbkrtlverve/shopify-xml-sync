@@ -162,11 +162,74 @@ class ShopifyService {
     
     async getAllProducts() {
         try {
-            const response = await this.makeRequest('/products.json?limit=250');
-            return response ? response.products : [];
+            console.log('Shopify ürünleri getiriliyor...');
+            
+            // İlk sayfa - sadece sayıyı öğrenmek için
+            const firstPageResponse = await this.makeRequest('/products.json?limit=1');
+            console.log('İlk sayfa yanıtı:', firstPageResponse);
+            
+            if (!firstPageResponse || !firstPageResponse.products) {
+                return [];
+            }
+            
+            // Eğer sadece sayıya ihtiyacımız varsa, count endpoint'ini kullanabiliriz
+            try {
+                const countResponse = await this.makeRequest('/products/count.json');
+                console.log('Ürün sayısı yanıtı:', countResponse);
+                
+                if (countResponse && countResponse.count !== undefined) {
+                    // Gerçek ürün sayısını döndür (dashboard için)
+                    return { length: countResponse.count, isCount: true };
+                }
+            } catch (countError) {
+                console.warn('Ürün sayısı alınamadı, tüm ürünler getirilecek:', countError);
+            }
+            
+            // Count API çalışmazsa, tüm ürünleri çek (sayfalama ile)
+            let allProducts = [];
+            let page = 1;
+            const limit = 250; // Shopify maksimum limit
+            
+            while (true) {
+                const response = await this.makeRequest(`/products.json?limit=${limit}&page=${page}`);
+                
+                if (!response || !response.products || response.products.length === 0) {
+                    break; // Son sayfa
+                }
+                
+                allProducts = allProducts.concat(response.products);
+                console.log(`Sayfa ${page}: ${response.products.length} ürün, toplam: ${allProducts.length}`);
+                
+                if (response.products.length < limit) {
+                    break; // Son sayfa (tam dolu değil)
+                }
+                
+                page++;
+                
+                // Güvenlik için maksimum 10 sayfa
+                if (page > 10) {
+                    console.warn('10 sayfadan fazla ürün var, sadece ilk 2500 ürün alındı');
+                    break;
+                }
+            }
+            
+            console.log(`Toplam ${allProducts.length} ürün getirildi`);
+            return allProducts;
+            
         } catch (error) {
             console.error("Shopify ürünleri alınamadı:", error);
             throw new Error(`Ürünler getirilemedi: ${error.message}`);
+        }
+    }
+    
+    async getProductCount() {
+        try {
+            const response = await this.makeRequest('/products/count.json');
+            return response ? response.count : 0;
+        } catch (error) {
+            console.warn("Ürün sayısı alınamadı, tüm ürünler sayılacak:", error);
+            const products = await this.getAllProducts();
+            return Array.isArray(products) ? products.length : (products.length || 0);
         }
     }
 }
