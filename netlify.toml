@@ -1,6 +1,3 @@
 [build]
   publish = "."
-  
-[[edge_functions]]
-  function = "shopify-proxy"
-  path = "/shopify-proxy"
+  functions = "netlify/functions"
