@@ -599,12 +599,21 @@ function handleStartSync() {
             if (result.debug) {
                 addLog(`XML boyutu: ${result.debug.xmlSize} byte`, 'info');
                 addLog(`Bulunan ürün: ${result.debug.productCount}`, 'info');
+                if (result.debug.firstProductKeys && result.debug.firstProductKeys.length > 0) {
+                    addLog(`Ürün alanları: ${result.debug.firstProductKeys.join(', ')}`, 'info');
+                }
             }
             updateDashboard(); // Dashboard'u güncelle
         } else {
             addLog(`Senkronizasyon hatası: ${result.message}`, 'error');
             if (result.debug) {
-                console.log('Sync debug:', result.debug);
+                console.log('Sync debug bilgisi:', result.debug);
+                if (result.debug.xmlStructure) {
+                    addLog('XML yapısı console\'da detaylandırıldı', 'info');
+                }
+                if (result.debug.rootKeys) {
+                    addLog(`XML root anahtarları: ${result.debug.rootKeys.join(', ')}`, 'info');
+                }
             }
         }
     })

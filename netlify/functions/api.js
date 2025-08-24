@@ -714,15 +714,71 @@ async function handleSync(action, event, headers) {
         
         console.log('XML parse edildi');
         
-        // XML yapısını kontrol et
+        // XML yapısını kontrol et ve ürünleri bul
         let products = [];
+        let xmlStructure = {};
+        
+        // XML yapısını analiz et
+        const analyzeXML = (obj, path = '') => {
+          if (typeof obj === 'object' && obj !== null) {
+            Object.keys(obj).forEach(key => {
+              const fullPath = path ? `${path}.${key}` : key;
+              xmlStructure[fullPath] = Array.isArray(obj[key]) ? `Array[${obj[key].length}]` : typeof obj[key];
+              if (typeof obj[key] === 'object') {
+                analyzeXML(obj[key], fullPath);
+              }
+            });
+          }
+        };
+        
+        analyzeXML(xmlData);
+        console.log('XML yapısı analizi:', xmlStructure);
+        
+        // Çeşitli XML formatlarını dene
         if (xmlData.catalog && xmlData.catalog.product) {
-          products = xmlData.catalog.product;
+          products = Array.isArray(xmlData.catalog.product) ? xmlData.catalog.product : [xmlData.catalog.product];
+          console.log('Catalog format bulundu');
         } else if (xmlData.products && xmlData.products.product) {
-          products = xmlData.products.product;
+          products = Array.isArray(xmlData.products.product) ? xmlData.products.product : [xmlData.products.product];
+          console.log('Products format bulundu');
         } else if (xmlData.rss && xmlData.rss.channel && xmlData.rss.channel[0] && xmlData.rss.channel[0].item) {
           products = xmlData.rss.channel[0].item;
+          console.log('RSS format bulundu');
+        } else if (xmlData.root && xmlData.root.product) {
+          products = Array.isArray(xmlData.root.product) ? xmlData.root.product : [xmlData.root.product];
+          console.log('Root format bulundu');
+        } else if (xmlData.product) {
+          products = Array.isArray(xmlData.product) ? xmlData.product : [xmlData.product];
+          console.log('Direct product format bulundu');
+        } else if (xmlData.items && xmlData.items.item) {
+          products = Array.isArray(xmlData.items.item) ? xmlData.items.item : [xmlData.items.item];
+          console.log('Items format bulundu');
         } else {
+          // En son çare: herhangi bir array alanı bul
+          const findArrays = (obj, path = '') => {
+            let arrays = [];
+            if (typeof obj === 'object' && obj !== null) {
+              Object.keys(obj).forEach(key => {
+                if (Array.isArray(obj[key]) && obj[key].length > 0) {
+                  arrays.push({ path: path ? `${path}.${key}` : key, data: obj[key] });
+                } else if (typeof obj[key] === 'object') {
+                  arrays = arrays.concat(findArrays(obj[key], path ? `${path}.${key}` : key));
+                }
+              });
+            }
+            return arrays;
+          };
+          
+          const foundArrays = findArrays(xmlData);
+          console.log('Bulunan array alanları:', foundArrays.map(a => a.path));
+          
+          if (foundArrays.length > 0) {
+            products = foundArrays[0].data;
+            console.log(`${foundArrays[0].path} formatı kullanılıyor`);
+          }
+        }
+        
+        if (products.length === 0) {
           console.log('XML yapısı:', Object.keys(xmlData));
           return {
             statusCode: 400,
@@ -731,14 +787,22 @@ async function handleSync(action, event, headers) {
               success: false,
               message: 'XML\'de ürün verisi bulunamadı',
               debug: {
-                xmlStructure: Object.keys(xmlData),
-                dataLength: xmlResponse.data.length
+                xmlStructure: xmlStructure,
+                rootKeys: Object.keys(xmlData),
+                dataLength: xmlResponse.data.length,
+                firstLevel: typeof xmlData === 'object' ? Object.keys(xmlData) : 'Not object'
               }
             })
           };
         }
         
         console.log('Bulunan ürün sayısı:', products.length);
+        
+        // İlk ürünün yapısını kontrol et
+        if (products.length > 0) {
+          console.log('İlk ürün yapısı:', Object.keys(products[0]));
+          console.log('İlk ürün örneği:', JSON.stringify(products[0]).substring(0, 200) + '...');
+        }
         
         // Basit senkronizasyon simülasyonu (gerçek implementasyon gerekecek)
         return {
@@ -751,7 +815,9 @@ async function handleSync(action, event, headers) {
             options: options,
             debug: {
               xmlSize: xmlResponse.data.length,
-              productCount: products.length
+              productCount: products.length,
+              xmlStructure: xmlStructure,
+              firstProductKeys: products.length > 0 ? Object.keys(products[0]) : []
             }
           })
         };
