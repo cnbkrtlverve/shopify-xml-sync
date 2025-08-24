@@ -4,15 +4,14 @@ class XMLService {
     constructor() {}
 
     async fetchAndParseXML() {
-        console.log('XML verisi sunucu üzerinden (proxy) alınıyor...');
+        const xmlProxyUrl = '/xml-feed';
+        console.log(`XML verisi Netlify proxy üzerinden alınıyor: ${xmlProxyUrl}`);
 
         try {
-            // Kendi sunucumuzdaki proxy endpoint'ine istek atıyoruz.
-            const response = await fetch('/api/xml/proxy');
+            const response = await fetch(xmlProxyUrl);
 
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ message: 'Proxy sunucusundan geçerli bir JSON yanıtı alınamadı.' }));
-                throw new Error(`Proxy hatası: ${response.status} - ${errorData.message || 'Bilinmeyen sunucu hatası'}`);
+                throw new Error(`Netlify proxy hatası: ${response.status} ${response.statusText}`);
             }
 
             const xmlText = await response.text();
@@ -22,14 +21,14 @@ class XMLService {
             const parserError = xmlDoc.querySelector("parsererror");
             if (parserError) {
                 console.error("XML Parse Hatası:", parserError.textContent);
-                throw new Error('Sunucudan gelen XML verisi ayrıştırılamadı.');
+                throw new Error('Proxy üzerinden gelen XML verisi ayrıştırılamadı.');
             }
 
-            console.log('Sunucu proxy üzerinden XML başarıyla alındı ve ayrıştırıldı!');
+            console.log('Netlify proxy üzerinden XML başarıyla alındı ve ayrıştırıldı!');
             return xmlDoc;
 
         } catch (error) {
-            console.error('XML proxy\'si kullanılırken bir hata oluştu:', error);
+            console.error('Netlify XML proxy\'si kullanılırken bir hata oluştu:', error);
             throw new Error(`XML kaynağına ulaşılamıyor: ${error.message}`);
         }
     }

@@ -27,3 +27,13 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# XML feed'i için proxy yönlendirmesi.
+# Bu kural, /xml-feed adresine gelen istekleri alıp,
+# hedef URL'den veriyi çekerek istemciye geri gönderir.
+# Bu sayede tarayıcıdaki CORS hatası atlatılmış olur.
+[[redirects]]
+  from = "/xml-feed"
+  to = "https://stildiva.sentos.com.tr/xml-sentos-out/1"
+  status = 200
+  force = true
