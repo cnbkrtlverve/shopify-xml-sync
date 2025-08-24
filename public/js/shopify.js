@@ -10,6 +10,12 @@ class ShopifyService {
             throw new Error('Shopify ayarları eksik. Lütfen yapılandırma sayfasını kontrol edin.');
         }
 
+        // Eğer shop.json ise Storefront API kullan (CORS yok)
+        if (endpoint === '/shop.json') {
+            return await this.getShopInfoViaStorefront(config);
+        }
+
+        // Diğer istekler için Admin API
         const targetUrl = `https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`;
         
         console.log(`Doğrudan istek gönderiliyor: ${targetUrl}`);
@@ -41,6 +47,61 @@ class ShopifyService {
         } catch (error) {
             console.error('Ağ veya Fetch hatası:', error);
             throw new Error(`Shopify API'ye ulaşılamadı: ${error.message}. Ağ bağlantınızı ve CORS eklentinizi kontrol edin.`);
+        }
+    }
+
+    async getShopInfoViaStorefront(config) {
+        // Storefront API - CORS sorunu yok
+        const storefrontUrl = `https://${config.shopifyUrl}/api/2024-07/graphql.json`;
+        
+        console.log(`Storefront API kullanılıyor (CORS yok): ${storefrontUrl}`);
+
+        const query = `
+            query {
+                shop {
+                    name
+                    description
+                    primaryDomain {
+                        host
+                    }
+                    currencyCode
+                }
+            }
+        `;
+
+        try {
+            const response = await fetch(storefrontUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Shopify-Storefront-Access-Token': config.shopifyToken // Storefront token kullanın
+                },
+                body: JSON.stringify({ query })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Storefront API hatası: ${response.status}`);
+            }
+
+            const result = await response.json();
+            
+            if (result.errors) {
+                throw new Error(`GraphQL hatası: ${result.errors[0].message}`);
+            }
+
+            // Admin API formatına uygun dönüş
+            return {
+                shop: {
+                    name: result.data.shop.name,
+                    domain: result.data.shop.primaryDomain.host,
+                    currency: result.data.shop.currencyCode
+                }
+            };
+
+        } catch (error) {
+            console.error('Storefront API hatası:', error);
+            // Hata durumunda Admin API'yi dene
+            throw error;
         }
     }
 
