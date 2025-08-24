@@ -263,6 +263,21 @@ async function updateDashboard() {
         }
     });
 
+    // Önce debug endpoint'i test edelim
+    try {
+        console.log('Debug endpoint test ediliyor...');
+        const debugResponse = await fetch('/api/debug/env', {
+            headers: apiHeaders
+        });
+        const debugText = await debugResponse.text();
+        console.log('Debug endpoint yanıtı:', {
+            status: debugResponse.status,
+            text: debugText
+        });
+    } catch (debugError) {
+        console.error('Debug endpoint hatası:', debugError);
+    }
+
     fetch('/api/shopify/info', {
         headers: apiHeaders
     })
