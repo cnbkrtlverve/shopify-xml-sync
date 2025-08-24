@@ -1,0 +1,68 @@
+/* filepath: public/css/style.css */
+body {
+    font-family: sans-serif;
+    background-color: #f4f6f8;
+    color: #333;
+    margin: 0;
+    padding: 20px;
+}
+.container {
+    max-width: 800px;
+    margin: auto;
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+h1 {
+    text-align: center;
+    color: #4a4a4a;
+}
+.status-container {
+    display: flex;
+    justify-content: space-around;
+    margin: 20px 0;
+}
+.status {
+    text-align: center;
+}
+.indicator {
+    display: inline-block;
+    padding: 5px 15px;
+    border-radius: 15px;
+    color: #fff;
+    font-weight: bold;
+}
+.indicator.pending { background-color: #f0ad4e; }
+.indicator.success { background-color: #5cb85c; }
+.indicator.error { background-color: #d9534f; }
+#sync-button {
+    display: block;
+    width: 100%;
+    padding: 15px;
+    font-size: 18px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-top: 20px;
+}
+#sync-button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+#log-container {
+    margin-top: 20px;
+    background: #282c34;
+    color: #abb2bf;
+    padding: 15px;
+    border-radius: 5px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+#logs {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
