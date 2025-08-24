@@ -10,8 +10,6 @@ import syncRoutes from './routes/syncRoutes.js';
 import googleRoutes from './routes/googleRoutes.js';
 // import priceUpdateRoutes from './routes/priceUpdateRoutes.js'; // Henüz kullanılmıyor
 
-import { fileURLToPath } from 'url';
-
 dotenv.config();
 
 const app = express();
@@ -22,6 +20,7 @@ app.use(cors());
 app.use(express.json());
 
 // Statik dosyalar için (public klasörü)
+// Projenin kök dizinini baz alarak 'public' klasörünün yolunu oluşturur.
 const __dirname = path.resolve();
 app.use(express.static(path.join(__dirname, 'public')));
 
