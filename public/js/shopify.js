@@ -1,235 +1,91 @@
 // shopify.js - Shopify API işlemleri
 class ShopifyService {
-    constructor() {
-        this.apiVersion = '2024-07';
-    }
-    
+
+    /**
+     * Backend API'ye istek gönderir.
+     * @param {string} endpoint - /api/shopify'dan sonraki API yolu (örn: '/info', '/products')
+     * @param {string} method - HTTP metodu
+     * @param {object|null} data - Gönderilecek veri (body)
+     * @returns {Promise<any>} - API'den gelen yanıt
+     */
     async makeRequest(endpoint, method = 'GET', data = null) {
-        const config = window.configService.getConfig();
-        if (!config.shopifyUrl) {
-            throw new Error('Shopify URL eksik. Lütfen yapılandırma sayfasını kontrol edin.');
-        }
-
-        // Eğer shop.json ise ve Storefront token varsa, Storefront API kullan (CORS yok)
-        if (endpoint === '/shop.json' && config.shopifyStorefrontToken) {
-            return await this.getShopInfoViaStorefront(config);
-        }
-
-        // Admin API için Admin token gerekli
-        if (!config.shopifyAdminToken) {
-            throw new Error('Shopify Admin Access Token eksik. Lütfen yapılandırma sayfasını kontrol edin.');
-        }
-
-        // CORS proxy kullanarak Admin API
-        const targetUrl = `https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`;
-        const proxyUrl = `/.netlify/functions/shopify-proxy`;
-        
-        console.log(`Proxy üzerinden istek gönderiliyor: ${targetUrl}`);
+        const apiUrl = `/api/shopify${endpoint}`;
+        console.log(`API isteği gönderiliyor: ${method} ${apiUrl}`);
 
         try {
-            const requestBody = {
-                url: targetUrl,
+            const options = {
                 method: method,
                 headers: {
-                    'X-Shopify-Access-Token': config.shopifyAdminToken,
                     'Content-Type': 'application/json'
                 }
             };
-
             if (data) {
-                requestBody.body = JSON.stringify(data);
+                options.body = JSON.stringify(data);
             }
 
-            const response = await fetch(proxyUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(requestBody)
-            });
+            const response = await fetch(apiUrl, options);
 
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Proxy hatası:', errorText);
-                throw new Error(`Proxy hatası: ${response.status} - ${errorText}`);
+                const errorData = await response.json().catch(() => ({ message: response.statusText }));
+                console.error('API hatası:', errorData);
+                throw new Error(errorData.message || `API Hatası: ${response.status}`);
             }
 
-            const result = await response.json();
-            return result;
-        } catch (error) {
-            console.error('Proxy isteği başarısız:', error);
-            
-            // Fallback: Doğrudan istek dene (CORS eklentisi aktifse çalışabilir)
-            console.log('Fallback: Doğrudan istek deneniyor...');
-            try {
-                const response = await fetch(targetUrl, {
-                    method: method,
-                    headers: {
-                        'X-Shopify-Access-Token': config.shopifyAdminToken,
-                        'Content-Type': 'application/json'
-                    },
-                    body: data ? JSON.stringify(data) : null
-                });
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('Shopify API Hatası:', `Durum: ${response.status}`, errorText);
-                    throw new Error(`Shopify API'den geçersiz yanıt alındı. Durum: ${response.status}. CORS eklentinizin aktif olduğundan emin olun.`);
-                }
-
-                const responseText = await response.text();
-                if (!responseText) {
-                    return null; // Boş yanıtlar geçerli olabilir
-                }
-                
-                return JSON.parse(responseText);
-
-            } catch (fallbackError) {
-                console.error('Ağ veya Fetch hatası:', fallbackError);
-                throw new Error(`Shopify API'ye ulaşılamadı: ${fallbackError.message}. Proxy ve CORS eklentisini kontrol edin.`);
-            }
-        }
-    }
-
-    async getShopInfoViaStorefront(config) {
-        // Storefront API - CORS sorunu yok - basit test sorgusu
-        const storefrontUrl = `https://${config.shopifyUrl}/api/2024-07/graphql.json`;
-        
-        console.log(`Storefront API kullanılıyor (CORS yok): ${storefrontUrl}`);
-
-        // Storefront API'sinde 'shop' sorgusu yok, basit bir test için products sorgulayalım
-        const query = `
-            query {
-                products(first: 1) {
-                    edges {
-                        node {
-                            id
-                            title
-                        }
-                    }
-                }
-            }
-        `;
-
-        try {
-            const response = await fetch(storefrontUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Shopify-Storefront-Access-Token': config.shopifyStorefrontToken
-                },
-                body: JSON.stringify({ query })
-            });
-
-            if (!response.ok) {
-                throw new Error(`Storefront API hatası: ${response.status}`);
-            }
-
-            const result = await response.json();
-            
-            if (result.errors) {
-                throw new Error(`GraphQL hatası: ${result.errors[0].message}`);
-            }
-
-            // Bağlantı başarılı - mock shop bilgisi döndür
-            console.log('Storefront API bağlantısı başarılı!', result.data);
-            return {
-                shop: {
-                    name: config.shopifyUrl.replace('.myshopify.com', ''),
-                    domain: config.shopifyUrl,
-                    currency: 'TRY',
-                    storefront_api: 'Bağlantı Başarılı'
-                }
-            };
+            const responseText = await response.text();
+            return responseText ? JSON.parse(responseText) : null;
 
         } catch (error) {
-            console.error('Storefront API hatası:', error);
+            console.error(`API isteği başarısız: ${apiUrl}`, error);
             throw error;
         }
     }
 
-    
+    /**
+     * Shopify mağaza bağlantısını ve temel bilgileri kontrol eder.
+     * @returns {Promise<object|null>} - Mağaza bilgileri veya null
+     */
     async checkConnection() {
         try {
-            // This endpoint requires authentication.
-            const response = await this.makeRequest('/shop.json');
-            return response ? response.shop : null;
+            const data = await this.makeRequest('/info');
+            // Backend /info endpoint'i { shop: {...}, productCount: ... } döndürüyor
+            return data ? data.shop : null;
         } catch (error) {
             console.error("Shopify bağlantı kontrolü hatası:", error);
             throw error;
         }
     }
-    
+
+    /**
+     * Shopify'daki toplam ürün sayısını alır.
+     * @returns {Promise<number>} - Toplam ürün sayısı
+     */
+    async getProductCount() {
+        try {
+            const data = await this.makeRequest('/info');
+             // Backend /info endpoint'i { shop: {...}, productCount: ... } döndürüyor
+            return data ? data.productCount : 0;
+        } catch (error) {
+            console.error("Shopify ürün sayısı alınamadı:", error);
+            // Hata durumunda 0 döndürerek arayüzün bozulmasını engelle
+            return 0;
+        }
+    }
+
+    /**
+     * Shopify'daki tüm ürünleri getirir.
+     * @returns {Promise<Array>} - Ürün listesi
+     */
     async getAllProducts() {
         try {
             console.log('Shopify ürünleri getiriliyor...');
-            
-            // İlk sayfa - sadece sayıyı öğrenmek için
-            const firstPageResponse = await this.makeRequest('/products.json?limit=1');
-            console.log('İlk sayfa yanıtı:', firstPageResponse);
-            
-            if (!firstPageResponse || !firstPageResponse.products) {
-                return [];
-            }
-            
-            // Eğer sadece sayıya ihtiyacımız varsa, count endpoint'ini kullanabiliriz
-            try {
-                const countResponse = await this.makeRequest('/products/count.json');
-                console.log('Ürün sayısı yanıtı:', countResponse);
-                
-                if (countResponse && countResponse.count !== undefined) {
-                    // Gerçek ürün sayısını döndür (dashboard için)
-                    return { length: countResponse.count, isCount: true };
-                }
-            } catch (countError) {
-                console.warn('Ürün sayısı alınamadı, tüm ürünler getirilecek:', countError);
-            }
-            
-            // Count API çalışmazsa, tüm ürünleri çek (sayfalama ile)
-            let allProducts = [];
-            let page = 1;
-            const limit = 250; // Shopify maksimum limit
-            
-            while (true) {
-                const response = await this.makeRequest(`/products.json?limit=${limit}&page=${page}`);
-                
-                if (!response || !response.products || response.products.length === 0) {
-                    break; // Son sayfa
-                }
-                
-                allProducts = allProducts.concat(response.products);
-                console.log(`Sayfa ${page}: ${response.products.length} ürün, toplam: ${allProducts.length}`);
-                
-                if (response.products.length < limit) {
-                    break; // Son sayfa (tam dolu değil)
-                }
-                
-                page++;
-                
-                // Güvenlik için maksimum 10 sayfa
-                if (page > 10) {
-                    console.warn('10 sayfadan fazla ürün var, sadece ilk 2500 ürün alındı');
-                    break;
-                }
-            }
-            
-            console.log(`Toplam ${allProducts.length} ürün getirildi`);
-            return allProducts;
-            
+            // Backend /products endpoint'i tüm ürünleri getirir
+            const data = await this.makeRequest('/products');
+            const products = data.products;
+            console.log(`Toplam ${products.length} ürün getirildi.`);
+            return products;
         } catch (error) {
             console.error("Shopify ürünleri alınamadı:", error);
             throw new Error(`Ürünler getirilemedi: ${error.message}`);
-        }
-    }
-    
-    async getProductCount() {
-        try {
-            const response = await this.makeRequest('/products/count.json');
-            return response ? response.count : 0;
-        } catch (error) {
-            console.warn("Ürün sayısı alınamadı, tüm ürünler sayılacak:", error);
-            const products = await this.getAllProducts();
-            return Array.isArray(products) ? products.length : (products.length || 0);
         }
     }
 }
