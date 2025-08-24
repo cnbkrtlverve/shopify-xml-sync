@@ -1,7 +1,7 @@
 exports.handler = async (event, context) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Shopify-Store-Url, X-Shopify-Admin-Token, X-XML-Feed-Url',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Shopify-Store-Url, X-Shopify-Admin-Token, X-XML-Feed-Url, X-Google-Client-Id, X-Google-Client-Secret, X-Google-Redirect-Uri, X-Google-Refresh-Token',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE',
     'Content-Type': 'application/json'
   };
@@ -642,6 +642,19 @@ async function handleSync(action, event, headers) {
       };
     }
 
+    if (action === 'summary') {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          summary: 'Henüz bir senkronizasyon yapılmadı.',
+          lastSync: null,
+          processedCount: 0
+        })
+      };
+    }
+
     if (event.httpMethod === 'POST') {
       const body = JSON.parse(event.body || '{}');
       const options = body.options || {};
@@ -699,23 +712,81 @@ async function handleSync(action, event, headers) {
 
 async function handleGoogle(action, event, headers) {
   try {
+    // Environment variables veya header'lardan Google config al
+    const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 
+                             event.headers['x-google-client-id'] || 
+                             event.headers['X-Google-Client-Id'];
+    const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 
+                                 event.headers['x-google-client-secret'] || 
+                                 event.headers['X-Google-Client-Secret'];
+    const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 
+                               event.headers['x-google-redirect-uri'] || 
+                               event.headers['X-Google-Redirect-Uri'] ||
+                               'https://vervegranxml.netlify.app/auth/google/callback';
+
+    console.log('Google config check:', {
+      hasClientId: !!GOOGLE_CLIENT_ID,
+      hasClientSecret: !!GOOGLE_CLIENT_SECRET,
+      redirectUri: GOOGLE_REDIRECT_URI
+    });
+
     if (action === 'status') {
+      const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN || 
+                                  event.headers['x-google-refresh-token'] || 
+                                  event.headers['X-Google-Refresh-Token'];
+      
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({
-          isAuthenticated: false
+          isAuthenticated: !!GOOGLE_REFRESH_TOKEN,
+          hasConfig: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET)
         })
       };
     }
 
     if (action === 'auth-url') {
+      if (!GOOGLE_CLIENT_ID) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            message: 'Google Client ID bulunamadı'
+          })
+        };
+      }
+
+      const scopes = [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive.file'
+      ];
+
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}&` +
+        `redirect_uri=${encodeURIComponent(GOOGLE_REDIRECT_URI)}&` +
+        `scope=${encodeURIComponent(scopes.join(' '))}&` +
+        `response_type=code&` +
+        `access_type=offline&` +
+        `prompt=consent`;
+
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({
-          url: null,
-          message: 'Google auth Netlify Functions ile henüz desteklenmiyor'
+          success: true,
+          url: authUrl
+        })
+      };
+    }
+
+    if (action === 'create-sheet') {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          message: 'Google Sheets entegrasyonu henüz tamamlanmadı'
         })
       };
     }

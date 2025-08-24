@@ -399,12 +399,17 @@ async function updateDashboard() {
     
     // Google Status
     const googleStatus = document.getElementById('google-status');
-    fetch('/api/google/status')
+    fetch('/api/google/status', {
+        headers: apiHeaders
+    })
         .then(res => res.json())
         .then(data => {
             if (data.isAuthenticated) {
                 googleStatus.textContent = 'Bağlandı';
                 googleStatus.className = 'status-badge success';
+            } else if (data.hasConfig) {
+                googleStatus.textContent = 'Yapılandırıldı';
+                googleStatus.className = 'status-badge warn';
             } else {
                 googleStatus.textContent = 'Bağlı Değil';
                 googleStatus.className = 'status-badge warn';
@@ -417,10 +422,16 @@ async function updateDashboard() {
 
     // Son Senkronizasyon Özeti
     const syncSummary = document.getElementById('last-sync-summary');
-    fetch('/api/sync/summary')
+    fetch('/api/sync/summary', {
+        headers: apiHeaders
+    })
         .then(res => res.json())
         .then(data => {
-            syncSummary.innerHTML = data.summary || 'Henüz senkronizasyon yapılmadı.';
+            if (data.success) {
+                syncSummary.innerHTML = data.summary || 'Henüz senkronizasyon yapılmadı.';
+            } else {
+                syncSummary.textContent = data.message || 'Özet alınamadı.';
+            }
         })
         .catch(() => {
             syncSummary.textContent = 'Özet alınamadı.';
@@ -490,14 +501,26 @@ function handleStartSync() {
 }
 
 function handleGoogleAuth() {
+    const config = window.configService.getConfig();
+    
+    const apiHeaders = {
+        'Content-Type': 'application/json'
+    };
+    
+    if (config.googleClientId) apiHeaders['X-Google-Client-Id'] = config.googleClientId;
+    if (config.googleClientSecret) apiHeaders['X-Google-Client-Secret'] = config.googleClientSecret;
+    if (config.googleRedirectUri) apiHeaders['X-Google-Redirect-Uri'] = config.googleRedirectUri;
+
     // Backend'deki auth URL'ini alıp yeni pencerede aç
-    fetch('/api/google/auth-url')
+    fetch('/api/google/auth-url', {
+        headers: apiHeaders
+    })
         .then(res => res.json())
         .then(data => {
             if (data.url) {
                 window.open(data.url, 'GoogleAuth', 'width=600,height=700');
             } else {
-                alert('Google kimlik doğrulama URL\'i alınamadı.');
+                alert('Google kimlik doğrulama URL\'i alınamadı: ' + (data.message || 'Bilinmeyen hata'));
             }
         })
         .catch(err => {
