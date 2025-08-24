@@ -9,21 +9,66 @@ class XMLService {
             throw new Error('XML URL ayarlanmamış.');
         }
 
+        console.log('XML URL:', config.xmlUrl);
+
+        // Önce doğrudan deneme (eğer CORS yoksa)
+        try {
+            console.log('Doğrudan XML erişimi deneniyor...');
+            const response = await fetch(config.xmlUrl);
+            if (response.ok) {
+                const xmlText = await response.text();
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xmlText, "application/xml");
+
+                const parserError = xmlDoc.querySelector("parsererror");
+                if (!parserError) {
+                    console.log('Doğrudan XML erişimi başarılı!');
+                    return xmlDoc;
+                }
+            }
+        } catch (error) {
+            console.log('Doğrudan erişim başarısız, proxy deneniyor...', error.message);
+        }
+
+        // Proxy'ler ile deneme
         const proxies = [
-            'https://api.codetabs.com/v1/proxy/?quest=',
-            'https://api.allorigins.win/raw?url='
+            // Kendi Netlify proxy'miz (en güvenilir)
+            { url: '/.netlify/functions/xml-proxy?url=', type: 'query' },
+            // Diğer public proxy'ler
+            { url: 'https://api.allorigins.win/raw?url=', type: 'path' },
+            { url: 'https://cors-anywhere.herokuapp.com/', type: 'path' },
+            { url: 'https://api.codetabs.com/v1/proxy/?quest=', type: 'path' }
         ];
 
         for (const proxy of proxies) {
             try {
-                const proxyUrl = `${proxy}${encodeURIComponent(config.xmlUrl)}`;
-                const response = await fetch(proxyUrl);
+                const proxyUrl = proxy.type === 'query' 
+                    ? `${proxy.url}${encodeURIComponent(config.xmlUrl)}`
+                    : `${proxy.url}${encodeURIComponent(config.xmlUrl)}`;
+                    
+                console.log(`Proxy deneniyor: ${proxy.url}`);
+                console.log(`Tam URL: ${proxyUrl}`);
+                
+                const response = await fetch(proxyUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/xml, text/xml, */*'
+                    }
+                });
+
+                console.log(`Proxy ${proxy.url} yanıtı:`, response.status, response.statusText);
 
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
                 const xmlText = await response.text();
+                console.log(`XML metin uzunluğu: ${xmlText.length} karakter`);
+                
+                if (xmlText.length < 10) {
+                    throw new Error('XML çok kısa, geçersiz olabilir');
+                }
+
                 const parser = new DOMParser();
                 const xmlDoc = parser.parseFromString(xmlText, "application/xml");
 
@@ -34,10 +79,11 @@ class XMLService {
                     throw new Error('XML dosyası ayrıştırılamadı. Formatını kontrol edin.');
                 }
                 
+                console.log(`Proxy ${proxy.url} ile XML başarıyla alındı!`);
                 return xmlDoc;
 
             } catch (error) {
-                console.warn(`Proxy ${proxy} ile deneme başarısız:`, error);
+                console.warn(`Proxy ${proxy.url} ile deneme başarısız:`, error.message);
                 continue; // Try next proxy
             }
         }
