@@ -154,11 +154,23 @@ async function handleShopify(action, event, headers) { return { statusCode: 200,
 
 async function handleShopify(action, event, headers) {
   try {
+    console.log('=== SHOPIFY HANDLER START ===');
+    console.log('Action:', action);
+    console.log('Headers received:', Object.keys(event.headers || {}));
+    console.log('Relevant headers:', {
+      'x-shopify-store-url': event.headers['x-shopify-store-url'],
+      'x-shopify-admin-token': event.headers['x-shopify-admin-token']
+    });
+    
     const axios = require('axios');
     
-    // Önce environment variables'dan, sonra header'lardan al
-    let SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || event.headers['x-shopify-store-url'];
-    let SHOPIFY_ADMIN_API_TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN || event.headers['x-shopify-admin-token'];
+    // Önce environment variables'dan, sonra header'lardan al (case-insensitive)
+    let SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || 
+                           event.headers['x-shopify-store-url'] || 
+                           event.headers['X-Shopify-Store-Url'];
+    let SHOPIFY_ADMIN_API_TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN || 
+                                 event.headers['x-shopify-admin-token'] || 
+                                 event.headers['X-Shopify-Admin-Token'];
 
     console.log('Shopify ENV + Header check:', { 
       hasStoreUrl: !!SHOPIFY_STORE_URL, 
@@ -416,8 +428,10 @@ async function handleXml(action, event, headers) {
   try {
     const axios = require('axios');
     
-    // Önce environment variables'dan, sonra header'lardan al
-    let XML_FEED_URL = process.env.XML_FEED_URL || event.headers['x-xml-feed-url'];
+    // Önce environment variables'dan, sonra header'lardan al (case-insensitive)
+    let XML_FEED_URL = process.env.XML_FEED_URL || 
+                      event.headers['x-xml-feed-url'] || 
+                      event.headers['X-XML-Feed-Url'];
     
     console.log('XML ENV + Header check:', { 
       hasXmlUrl: !!XML_FEED_URL,
