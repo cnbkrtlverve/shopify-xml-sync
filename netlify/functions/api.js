@@ -9,6 +9,47 @@ exports.handler = async (event, context) => {
   if (event.httpMethod === 'OPTIONS') {
 }
 
+async function handleConfig(action, event, headers) {
+  try {
+    // config endpoint'i için action yok, direkt POST isteği
+    if (event.httpMethod === 'POST') {
+      const body = JSON.parse(event.body || '{}');
+      
+      // Frontend'den gelen config bilgileri
+      console.log('Config kaydetme isteği alındı:', body);
+      
+      // Not: Netlify Functions'da .env dosyasını değiştirmek mümkün değil
+      // Bu endpoint sadece config'in alındığını onaylamak için
+      
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ 
+          success: true, 
+          message: 'Ayarlar alındı. Not: Netlify\'da ayarlar Environment Variables üzerinden yapılmalıdır.' 
+        })
+      };
+    }
+
+    return {
+      statusCode: 405,
+      headers,
+      body: JSON.stringify({ error: 'Sadece POST metodu desteklenir' })
+    };
+  } catch (error) {
+    console.error('Config handler error:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ 
+        success: false,
+        error: 'Config handler hatası',
+        message: error.message
+      })
+    };
+  }
+}
+
 async function handleDebug(action, event, headers) {
   try {
     if (action === 'env') {
@@ -56,6 +97,9 @@ async function handleShopify(action, event, headers) { return { statusCode: 200,
 
     console.log('API Request:', { path, service, action, method: event.httpMethod });
 
+    if (service === 'config') {
+      return await handleConfig(action, event, headers);
+    }
     if (service === 'debug') {
       return await handleDebug(action, event, headers);
     }

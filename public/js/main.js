@@ -148,7 +148,7 @@ function handleSaveConfig() {
         googleSheetId 
     });
     
-    // Backend'e de kaydet
+    // Backend'e de kaydet (Netlify'da bu sadece log amaçlı)
     fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -162,9 +162,9 @@ function handleSaveConfig() {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            showConfigMessage('Ayarlar başarıyla kaydedildi!', 'success');
+            showConfigMessage('⚠️ Ayarlar tarayıcıda kaydedildi. Netlify\'da çalışması için Environment Variables\'ları manuel olarak eklemelisiniz.', 'warn');
         } else {
-            showConfigMessage(`Sunucu tarafında kaydetme hatası: ${data.message}`, 'error');
+            showConfigMessage(`Sunucu tarafında kaydetme hatası: ${data.message || 'Bilinmeyen hata'}`, 'error');
         }
     })
     .catch(err => {
