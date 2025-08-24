@@ -816,16 +816,45 @@ async function handleCleanTestProducts() {
     addLog('Test ürünleri temizleniyor...', 'info');
     
     try {
+        // 15 saniye timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        
         const response = await fetch('/.netlify/functions/api/sync/clean', {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Shopify-Shop-Url': config.shopifyUrl,
                 'X-Shopify-Access-Token': config.shopifyAdminToken
-            }
+            },
+            signal: controller.signal
         });
         
-        const result = await response.json();
+        clearTimeout(timeoutId);
+        
+        // Response kontrolü
+        if (!response.ok) {
+            if (response.status === 504) {
+                addLog('⏱️ İşlem zaman aşımına uğradı, tekrar deneyin', 'warning');
+                return;
+            }
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        // JSON parse kontrolü
+        let result;
+        try {
+            const responseText = await response.text();
+            if (!responseText.trim()) {
+                addLog('⚠️ Boş yanıt alındı, işlem devam ediyor olabilir', 'warning');
+                return;
+            }
+            result = JSON.parse(responseText);
+        } catch (parseError) {
+            addLog('⚠️ Yanıt formatı hatalı, işlem devam ediyor olabilir', 'warning');
+            console.error('Parse error:', parseError);
+            return;
+        }
         
         if (result.success) {
             addLog(`✅ ${result.message}`, 'success');
@@ -834,13 +863,23 @@ async function handleCleanTestProducts() {
                     addLog(`  • ${product.title} (ID: ${product.id})`, 'info');
                 });
             }
+            
+            if (result.remainingCount > 0) {
+                addLog(`🔄 ${result.remainingCount} ürün kaldı, tekrar "Temizle" butonuna basın`, 'warning');
+            }
+            
             updateDashboard(); // Dashboard'u güncelle
         } else {
             addLog(`❌ Temizleme hatası: ${result.message}`, 'error');
         }
         
     } catch (error) {
-        addLog(`❌ Bağlantı hatası: ${error.message}`, 'error');
+        if (error.name === 'AbortError') {
+            addLog('⏱️ İşlem zaman aşımına uğradı (15 saniye)', 'warning');
+            addLog('💡 Çok fazla ürün var, tekrar deneyin', 'info');
+        } else {
+            addLog(`❌ Bağlantı hatası: ${error.message}`, 'error');
+        }
         console.error('Clean error:', error);
     } finally {
         btn.disabled = false;

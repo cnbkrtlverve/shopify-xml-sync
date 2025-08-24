@@ -576,8 +576,8 @@ exports.handler = async (event, context) => {
           };
         }
         
-        // İlk 5 ürünü işle (test için)
-        const productsToProcess = products.slice(0, 5);
+        // İlk 10 ürünü işle (optimize edilmiş)
+        const productsToProcess = products.slice(0, 10);
         console.log(`${productsToProcess.length} ürün işlenecek`);
         
         let createdCount = 0;
@@ -703,7 +703,7 @@ exports.handler = async (event, context) => {
             
             // Rate limiting için küçük bekleme
             if (i < productsToProcess.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 100));
+              await new Promise(resolve => setTimeout(resolve, 50));
             }
             
           } catch (productError) {
@@ -1042,18 +1042,21 @@ exports.handler = async (event, context) => {
       }
 
       try {
-        // Test/XML ürünlerini bul ve sil
-        const productsResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/products.json?limit=250`, {
+        // Test/XML ürünlerini bul (daha hızlı sorgu)
+        const productsResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/products.json?vendor=Sentos&limit=50`, {
           headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
-          timeout: 10000
+          timeout: 8000
         });
 
-        const testProducts = productsResponse.data.products.filter(p => 
+        let testProducts = productsResponse.data.products || [];
+        
+        // Ek filtreleme
+        testProducts = testProducts.filter(p => 
+          p.vendor === 'Sentos' ||
+          p.product_type === 'XML Import' ||
           p.title.includes('Test') || 
           p.title.includes('XML') ||
-          p.vendor === 'Sentos' ||
-          p.title.includes('Büyük Beden') ||
-          p.product_type === 'XML Import'
+          p.title.includes('Büyük Beden')
         );
 
         if (testProducts.length === 0) {
@@ -1068,32 +1071,42 @@ exports.handler = async (event, context) => {
           };
         }
 
-        // Test ürünlerini sil
+        // Maksimum 10 ürün sil (timeout'u önlemek için)
+        const productsToDelete = testProducts.slice(0, 10);
         let deletedCount = 0;
         const deletedProducts = [];
         
-        for (const product of testProducts) {
+        // Paralel silme ile hızlandır
+        const deletePromises = productsToDelete.map(async (product) => {
           try {
             await axios.delete(`https://${shopUrl}/admin/api/2024-07/products/${product.id}.json`, {
               headers: { 'X-Shopify-Access-Token': accessToken },
-              timeout: 5000
+              timeout: 3000
             });
             deletedCount++;
             deletedProducts.push({ id: product.id, title: product.title });
             console.log(`Test ürünü silindi: ${product.title} (ID: ${product.id})`);
+            return true;
           } catch (deleteError) {
             console.error(`Ürün silinemedi: ${product.title}`, deleteError.message);
+            return false;
           }
-        }
+        });
+
+        // Tüm silme işlemlerini bekle (max 5 saniye)
+        await Promise.allSettled(deletePromises);
+
+        const remainingCount = testProducts.length - productsToDelete.length;
 
         return {
           statusCode: 200,
           headers,
           body: JSON.stringify({
             success: true,
-            message: `${deletedCount} test ürünü silindi`,
+            message: `${deletedCount} test ürünü silindi${remainingCount > 0 ? ` (${remainingCount} ürün kaldı, tekrar deneyin)` : ''}`,
             deletedCount,
-            deletedProducts
+            remainingCount,
+            deletedProducts: deletedProducts.slice(0, 5) // İlk 5 tanesini göster
           })
         };
 
