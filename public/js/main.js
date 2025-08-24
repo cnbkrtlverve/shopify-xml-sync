@@ -10,6 +10,9 @@ document.addEventListener('DOMContentLoaded', () => {
     window.syncService = window.syncService || { setLogCallback: () => {}, runSync: () => {} };
     window.googleService = window.googleService || {};
 
+    // Check for Google OAuth callback
+    checkGoogleCallback();
+
     // Check login state and setup UI
     // Demo için otomatik login yapalım - zorla giriş yap
     sessionStorage.setItem('isLoggedIn', 'true');
@@ -26,6 +29,57 @@ document.addEventListener('DOMContentLoaded', () => {
     // Always setup login form listener
     document.getElementById('login-form').addEventListener('submit', handleLogin);
 });
+
+function checkGoogleCallback() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+    
+    if (code) {
+        console.log('Google OAuth callback detected:', code);
+        
+        // Google OAuth'dan dönen kodu işle
+        const config = window.configService.getConfig();
+        
+        const apiHeaders = {
+            'Content-Type': 'application/json'
+        };
+        
+        if (config.googleClientId) apiHeaders['X-Google-Client-Id'] = config.googleClientId;
+        if (config.googleClientSecret) apiHeaders['X-Google-Client-Secret'] = config.googleClientSecret;
+        if (config.googleRedirectUri) apiHeaders['X-Google-Redirect-Uri'] = config.googleRedirectUri;
+        
+        // Backend'e authorization code'u gönder
+        fetch('/api/google/exchange-code', {
+            method: 'POST',
+            headers: apiHeaders,
+            body: JSON.stringify({ code: code })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.refreshToken) {
+                // Refresh token'ı kaydet
+                const currentConfig = window.configService.getConfig();
+                currentConfig.googleRefreshToken = data.refreshToken;
+                window.configService.saveConfig(currentConfig);
+                
+                alert('Google ile bağlantı başarılı!');
+                
+                // URL'den OAuth parametrelerini temizle
+                window.history.replaceState({}, document.title, window.location.pathname);
+                
+                // Dashboard'ı güncelle
+                updateDashboard();
+            } else {
+                alert('Google authentication hatası: ' + (data.message || 'Bilinmeyen hata'));
+            }
+        })
+        .catch(error => {
+            console.error('Google callback error:', error);
+            alert('Google authentication işlenirken hata: ' + error.message);
+        });
+    }
+}
 
 function initializeApp() {
     setupEventListeners();
@@ -234,10 +288,19 @@ async function handleTestXML() {
     if (currentConfig.xmlUrl) apiHeaders['X-XML-Feed-Url'] = currentConfig.xmlUrl;
 
     showConfigMessage('XML bağlantısı test ediliyor...', 'info');
+    
+    // 8 saniye timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    
     try {
         const result = await fetch('/api/xml/check', {
-            headers: apiHeaders
+            headers: apiHeaders,
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
+        
         const data = await result.json();
         if (data.success) {
             showConfigMessage('XML bağlantısı başarılı!', 'success');
@@ -245,7 +308,12 @@ async function handleTestXML() {
             showConfigMessage(`Bağlantı başarısız: ${data.message}`, 'error');
         }
     } catch (error) {
-        showConfigMessage(`Bağlantı hatası: ${error.message}`, 'error');
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+            showConfigMessage('XML bağlantısı zaman aşımına uğradı (8s)', 'error');
+        } else {
+            showConfigMessage(`Bağlantı hatası: ${error.message}`, 'error');
+        }
     }
 }
 
@@ -503,6 +571,11 @@ function handleStartSync() {
 function handleGoogleAuth() {
     const config = window.configService.getConfig();
     
+    if (!config.googleClientId || !config.googleClientSecret) {
+        alert('Lütfen önce Google Client ID ve Client Secret ayarlarını girin.');
+        return;
+    }
+    
     const apiHeaders = {
         'Content-Type': 'application/json'
     };
@@ -517,8 +590,9 @@ function handleGoogleAuth() {
     })
         .then(res => res.json())
         .then(data => {
-            if (data.url) {
-                window.open(data.url, 'GoogleAuth', 'width=600,height=700');
+            if (data.success && data.url) {
+                // Popup pencere yerine ana pencerede aç (redirect)
+                window.location.href = data.url;
             } else {
                 alert('Google kimlik doğrulama URL\'i alınamadı: ' + (data.message || 'Bilinmeyen hata'));
             }

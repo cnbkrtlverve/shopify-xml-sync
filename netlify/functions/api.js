@@ -462,7 +462,7 @@ async function handleXml(action, event, headers) {
         console.log('XML check starting for:', XML_FEED_URL);
         
         const response = await axios.get(XML_FEED_URL, { 
-          timeout: 15000,
+          timeout: 8000,
           headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; ShopifyXMLSync/1.0)',
             'Accept': 'application/xml, text/xml, */*'
@@ -663,7 +663,7 @@ async function handleSync(action, event, headers) {
       
       try {
         // XML'den ürünleri al
-        const xmlResponse = await axios.get(XML_FEED_URL, { timeout: 10000 });
+        const xmlResponse = await axios.get(XML_FEED_URL, { timeout: 6000 });
         const parser = new xml2js.Parser();
         const xmlData = await parser.parseStringPromise(xmlResponse.data);
         
@@ -778,6 +778,79 @@ async function handleGoogle(action, event, headers) {
           url: authUrl
         })
       };
+    }
+
+    if (action === 'exchange-code' && event.httpMethod === 'POST') {
+      if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            message: 'Google Client ID veya Client Secret bulunamadı'
+          })
+        };
+      }
+
+      const body = JSON.parse(event.body || '{}');
+      const code = body.code;
+
+      if (!code) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            message: 'Authorization code bulunamadı'
+          })
+        };
+      }
+
+      try {
+        const axios = require('axios');
+        
+        // Google'dan access token ve refresh token al
+        const tokenResponse = await axios.post('https://oauth2.googleapis.com/token', {
+          client_id: GOOGLE_CLIENT_ID,
+          client_secret: GOOGLE_CLIENT_SECRET,
+          code: code,
+          grant_type: 'authorization_code',
+          redirect_uri: GOOGLE_REDIRECT_URI
+        });
+
+        const tokens = tokenResponse.data;
+        
+        if (tokens.refresh_token) {
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({
+              success: true,
+              refreshToken: tokens.refresh_token,
+              accessToken: tokens.access_token
+            })
+          };
+        } else {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({
+              success: false,
+              message: 'Refresh token alınamadı. Lütfen Google hesabınızdan uygulamaya verilen izinleri kaldırıp tekrar deneyin.'
+            })
+          };
+        }
+      } catch (tokenError) {
+        console.error('Google token exchange error:', tokenError);
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            message: 'Token değişimi hatası: ' + tokenError.message
+          })
+        };
+      }
     }
 
     if (action === 'create-sheet') {
