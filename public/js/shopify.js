@@ -69,9 +69,6 @@ class ShopifyService {
                     primaryDomain {
                         host
                     }
-                    paymentSettings {
-                        currencyCode
-                    }
                 }
             }
         `;
@@ -101,7 +98,7 @@ class ShopifyService {
                 shop: {
                     name: result.data.shop.name,
                     domain: result.data.shop.primaryDomain.host,
-                    currency: result.data.shop.paymentSettings?.currencyCode || 'USD'
+                    currency: 'TRY' // Varsayılan para birimi
                 }
             };
 
