@@ -1,4 +1,299 @@
-const serverless = require('serverless-http');
-const app = require('../../dist/server');
+exports.handler = async (event, context) => {
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE',
+    'Content-Type': 'application/json'
+  };
 
-module.exports.handler = serverless(app);
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers, body: '' };
+  }
+
+  const path = event.path.replace('/api/', '');
+  const segments = path.split('/');
+  const service = segments[0];
+  const action = segments[1];
+
+  try {
+    if (service === 'shopify') {
+      return await handleShopify(action, event, headers);
+    }
+    if (service === 'xml') {
+      return await handleXml(action, event, headers);
+    }
+    if (service === 'sync') {
+      return await handleSync(action, event, headers);
+    }
+    if (service === 'google') {
+      return await handleGoogle(action, event, headers);
+    }
+
+    return {
+      statusCode: 404,
+      headers,
+      body: JSON.stringify({ error: 'Endpoint bulunamadı' })
+    };
+  } catch (error) {
+    console.error('API Error:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ error: error.message })
+    };
+  }
+};
+
+async function handleShopify(action, event, headers) {
+  const axios = require('axios');
+  
+  const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL;
+  const SHOPIFY_ADMIN_API_TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN;
+
+  if (!SHOPIFY_STORE_URL || !SHOPIFY_ADMIN_API_TOKEN) {
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ success: false, message: 'Shopify ayarları eksik' })
+    };
+  }
+
+  const shopifyApi = axios.create({
+    baseURL: `https://${SHOPIFY_STORE_URL}/admin/api/2024-07`,
+    headers: { 
+      'X-Shopify-Access-Token': SHOPIFY_ADMIN_API_TOKEN,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (action === 'check') {
+    try {
+      await shopifyApi.get('/shop.json');
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ success: true, message: 'Başarılı' })
+      };
+    } catch (error) {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ success: false, message: 'Bağlantı hatası' })
+      };
+    }
+  }
+
+  if (action === 'info') {
+    try {
+      const { data: shopData } = await shopifyApi.get('/shop.json');
+      const { data: countData } = await shopifyApi.get('/products/count.json');
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          name: shopData.shop.name,
+          email: shopData.shop.email,
+          productCount: countData.count
+        })
+      };
+    } catch (error) {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ success: false, message: 'Shopify bilgileri alınamadı' })
+      };
+    }
+  }
+
+  if (action === 'search') {
+    const query = event.queryStringParameters?.q;
+    if (!query) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ success: false, message: 'Arama sorgusu gerekli' })
+      };
+    }
+
+    try {
+      const graphqlQuery = {
+        query: `
+        query productSearch($query: String!) {
+          products(first: 10, query: $query) {
+            edges {
+              node {
+                id
+                title
+                handle
+                variants(first: 20) {
+                  edges {
+                    node {
+                      id
+                      title
+                      sku
+                      price
+                      barcode
+                      inventoryQuantity
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        `,
+        variables: { query: `title:*${query}* OR sku:${query}` },
+      };
+
+      const response = await shopifyApi.post('/graphql.json', graphqlQuery);
+      const products = response.data.data.products.edges.map((edge) => {
+        return {
+          ...edge.node,
+          variants: edge.node.variants.edges.map((vEdge) => vEdge.node)
+        };
+      });
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ success: true, products })
+      };
+    } catch (error) {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ success: false, products: [] })
+      };
+    }
+  }
+
+  return {
+    statusCode: 404,
+    headers,
+    body: JSON.stringify({ error: 'Shopify action bulunamadı' })
+  };
+}
+
+async function handleXml(action, event, headers) {
+  const axios = require('axios');
+  
+  const XML_FEED_URL = process.env.XML_FEED_URL;
+
+  if (!XML_FEED_URL) {
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ success: false, message: 'XML URL eksik' })
+    };
+  }
+
+  if (action === 'check') {
+    try {
+      const response = await axios.get(XML_FEED_URL);
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ success: true, message: 'XML bağlantısı başarılı' })
+      };
+    } catch (error) {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ success: false, message: 'XML bağlantı hatası' })
+      };
+    }
+  }
+
+  if (action === 'stats') {
+    try {
+      const response = await axios.get(XML_FEED_URL);
+      const xml2js = require('xml2js');
+      const parsed = await xml2js.parseStringPromise(response.data);
+      
+      const products = parsed.Urunler?.Urun || [];
+      const productCount = Array.isArray(products) ? products.length : (products ? 1 : 0);
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          url: XML_FEED_URL,
+          productCount
+        })
+      };
+    } catch (error) {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ success: false, message: 'XML stats alınamadı' })
+      };
+    }
+  }
+
+  return {
+    statusCode: 404,
+    headers,
+    body: JSON.stringify({ error: 'XML action bulunamadı' })
+  };
+}
+
+async function handleSync(action, event, headers) {
+  if (action === 'summary') {
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({
+        summary: 'Henüz bir senkronizasyon yapılmadı.'
+      })
+    };
+  }
+
+  if (action === 'start') {
+    // Netlify Functions timeout nedeniyle uzun süreli sync işlemi yapamaz
+    // Bu endpoint sadece test amaçlı
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({
+        message: 'Senkronizasyon Netlify Functions limitleri nedeniyle desteklenmiyor'
+      })
+    };
+  }
+
+  return {
+    statusCode: 404,
+    headers,
+    body: JSON.stringify({ error: 'Sync action bulunamadı' })
+  };
+}
+
+async function handleGoogle(action, event, headers) {
+  if (action === 'status') {
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({
+        isAuthenticated: false
+      })
+    };
+  }
+
+  if (action === 'auth-url') {
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({
+        url: null,
+        message: 'Google auth Netlify Functions ile henüz desteklenmiyor'
+      })
+    };
+  }
+
+  return {
+    statusCode: 404,
+    headers,
+    body: JSON.stringify({ error: 'Google action bulunamadı' })
+  };
+}
