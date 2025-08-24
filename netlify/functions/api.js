@@ -744,13 +744,13 @@ async function handleSync(action, event, headers) {
         const xmlData = await parser.parseStringPromise(xmlResponse.data);
         console.log('XML parse edildi');
         
-        // XML yapısını kontrol et ve ürünleri bul - basitleştirilmiş
+        // XML yapısını kontrol et ve ürünleri bul - kapsamlı format desteği
         let products = [];
         let foundPath = '';
         
         console.log('XML root anahtarları:', Object.keys(xmlData));
         
-        // Hızlı format kontrolü
+        // İlk seviye kontrol
         if (xmlData.catalog?.product) {
           products = Array.isArray(xmlData.catalog.product) ? xmlData.catalog.product : [xmlData.catalog.product];
           foundPath = 'catalog.product';
@@ -769,29 +769,62 @@ async function handleSync(action, event, headers) {
         } else if (xmlData.items?.item) {
           products = Array.isArray(xmlData.items.item) ? xmlData.items.item : [xmlData.items.item];
           foundPath = 'items.item';
+        } else if (xmlData.channel?.item) {
+          products = Array.isArray(xmlData.channel.item) ? xmlData.channel.item : [xmlData.channel.item];
+          foundPath = 'channel.item';
+        } else if (xmlData.feed?.entry) {
+          products = Array.isArray(xmlData.feed.entry) ? xmlData.feed.entry : [xmlData.feed.entry];
+          foundPath = 'feed.entry';
+        } else if (xmlData.urunler?.urun) {
+          products = Array.isArray(xmlData.urunler.urun) ? xmlData.urunler.urun : [xmlData.urunler.urun];
+          foundPath = 'urunler.urun';
+        } else if (xmlData.urun) {
+          products = Array.isArray(xmlData.urun) ? xmlData.urun : [xmlData.urun];
+          foundPath = 'urun';
         } else {
-          // Son çare: ilk seviyede array olan ilk alanı bul
-          for (const [key, value] of Object.entries(xmlData)) {
-            if (Array.isArray(value) && value.length > 0) {
-              products = value;
-              foundPath = key;
-              break;
-            } else if (typeof value === 'object' && value !== null) {
-              for (const [subKey, subValue] of Object.entries(value)) {
-                if (Array.isArray(subValue) && subValue.length > 0) {
-                  products = subValue;
-                  foundPath = `${key}.${subKey}`;
-                  break;
+          // Daha derin arama - recursive search
+          const findProductArrays = (obj, path = '', maxDepth = 3) => {
+            if (maxDepth <= 0) return [];
+            let found = [];
+            
+            if (typeof obj === 'object' && obj !== null) {
+              for (const [key, value] of Object.entries(obj)) {
+                const currentPath = path ? `${path}.${key}` : key;
+                
+                // Array kontrolü
+                if (Array.isArray(value) && value.length > 0) {
+                  // Array elemanları object mi kontrol et
+                  if (typeof value[0] === 'object' && value[0] !== null) {
+                    found.push({ path: currentPath, data: value, count: value.length });
+                  }
+                } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                  // Object ise içine bak
+                  found = found.concat(findProductArrays(value, currentPath, maxDepth - 1));
                 }
               }
-              if (products.length > 0) break;
             }
+            return found;
+          };
+          
+          const foundArrays = findProductArrays(xmlData);
+          console.log('Bulunan array alanları:', foundArrays.map(a => `${a.path} (${a.count} items)`));
+          
+          if (foundArrays.length > 0) {
+            // En çok eleman içeren array'i seç
+            const bestMatch = foundArrays.sort((a, b) => b.count - a.count)[0];
+            products = bestMatch.data;
+            foundPath = bestMatch.path;
+            console.log(`En uygun array seçildi: ${foundPath} (${bestMatch.count} items)`);
           }
         }
         
         console.log(`Ürünler bulundu: ${foundPath}, sayı: ${products.length}`);
         
+        // Ürün bulunamadıysa detaylı debug bilgisi
         if (products.length === 0) {
+          // XML'in ilk birkaç karakterini göster
+          const xmlPreview = xmlResponse.data.substring(0, 500);
+          
           return {
             statusCode: 400,
             headers,
@@ -801,7 +834,13 @@ async function handleSync(action, event, headers) {
               debug: {
                 rootKeys: Object.keys(xmlData),
                 dataLength: xmlResponse.data.length,
-                checkedPaths: ['catalog.product', 'products.product', 'rss.channel[0].item', 'root.product', 'product', 'items.item']
+                xmlPreview: xmlPreview,
+                checkedPaths: [
+                  'catalog.product', 'products.product', 'rss.channel[0].item', 
+                  'root.product', 'product', 'items.item', 'channel.item', 
+                  'feed.entry', 'urunler.urun', 'urun'
+                ],
+                suggestion: 'XML yapısını console\'da kontrol edin'
               }
             })
           };
@@ -809,8 +848,38 @@ async function handleSync(action, event, headers) {
         
         console.log('Bulunan ürün sayısı:', products.length);
         
-        // İlk ürünün temel bilgilerini al (memory'yi korumak için sadece anahtarlar)
-        const firstProductKeys = products.length > 0 ? Object.keys(products[0]).slice(0, 10) : [];
+        // İlk ürünün yapısını analiz et
+        let productAnalysis = {};
+        if (products.length > 0) {
+          const firstProduct = products[0];
+          productAnalysis = {
+            keys: Object.keys(firstProduct).slice(0, 15), // İlk 15 anahtar
+            hasId: !!(firstProduct.id || firstProduct.ID || firstProduct.productId || firstProduct.kod || firstProduct.code),
+            hasName: !!(firstProduct.name || firstProduct.title || firstProduct.baslik || firstProduct.ad || firstProduct.urun_adi),
+            hasPrice: !!(firstProduct.price || firstProduct.fiyat || firstProduct.satis_fiyati || firstProduct.cost),
+            hasDescription: !!(firstProduct.description || firstProduct.aciklama || firstProduct.tanim),
+            hasCategory: !!(firstProduct.category || firstProduct.kategori || firstProduct.category_name),
+            hasStock: !!(firstProduct.stock || firstProduct.stok || firstProduct.quantity || firstProduct.miktar),
+            hasImage: !!(firstProduct.image || firstProduct.resim || firstProduct.foto || firstProduct.picture)
+          };
+          
+          console.log('Ürün analizi:', productAnalysis);
+          
+          // İlk ürünün örnek değerlerini al
+          const sampleValues = {};
+          Object.keys(firstProduct).slice(0, 5).forEach(key => {
+            const value = firstProduct[key];
+            if (typeof value === 'string' || typeof value === 'number') {
+              sampleValues[key] = String(value).substring(0, 50);
+            } else if (typeof value === 'object') {
+              sampleValues[key] = `[Object: ${Object.keys(value).join(', ')}]`;
+            } else {
+              sampleValues[key] = typeof value;
+            }
+          });
+          
+          console.log('İlk ürün örnek değerleri:', sampleValues);
+        }
         
         // Memory'yi korumak için ürün detaylarını temizle
         xmlData = null;
@@ -827,7 +896,7 @@ async function handleSync(action, event, headers) {
               xmlSize: xmlResponse.data.length,
               productCount: products.length,
               foundPath: foundPath,
-              firstProductKeys: firstProductKeys
+              productAnalysis: productAnalysis
             }
           })
         };

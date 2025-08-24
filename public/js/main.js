@@ -599,8 +599,26 @@ function handleStartSync() {
             if (result.debug) {
                 addLog(`XML boyutu: ${result.debug.xmlSize} byte`, 'info');
                 addLog(`Bulunan ürün: ${result.debug.productCount}`, 'info');
-                if (result.debug.firstProductKeys && result.debug.firstProductKeys.length > 0) {
-                    addLog(`Ürün alanları: ${result.debug.firstProductKeys.join(', ')}`, 'info');
+                addLog(`Ürün yolu: ${result.debug.foundPath}`, 'info');
+                
+                if (result.debug.productAnalysis) {
+                    const analysis = result.debug.productAnalysis;
+                    addLog(`Ürün alanları: ${analysis.keys.join(', ')}`, 'info');
+                    
+                    const features = [];
+                    if (analysis.hasId) features.push('ID');
+                    if (analysis.hasName) features.push('İsim');
+                    if (analysis.hasPrice) features.push('Fiyat');
+                    if (analysis.hasDescription) features.push('Açıklama');
+                    if (analysis.hasCategory) features.push('Kategori');
+                    if (analysis.hasStock) features.push('Stok');
+                    if (analysis.hasImage) features.push('Resim');
+                    
+                    if (features.length > 0) {
+                        addLog(`Tespit edilen özellikler: ${features.join(', ')}`, 'success');
+                    } else {
+                        addLog('Standart ürün özellikleri tespit edilemedi', 'warning');
+                    }
                 }
             }
             updateDashboard(); // Dashboard'u güncelle
@@ -608,11 +626,15 @@ function handleStartSync() {
             addLog(`Senkronizasyon hatası: ${result.message}`, 'error');
             if (result.debug) {
                 console.log('Sync debug bilgisi:', result.debug);
-                if (result.debug.xmlStructure) {
-                    addLog('XML yapısı console\'da detaylandırıldı', 'info');
-                }
                 if (result.debug.rootKeys) {
                     addLog(`XML root anahtarları: ${result.debug.rootKeys.join(', ')}`, 'info');
+                }
+                if (result.debug.xmlPreview) {
+                    addLog('XML önizleme console\'da görüntülendi', 'info');
+                    console.log('XML Preview:', result.debug.xmlPreview);
+                }
+                if (result.debug.checkedPaths) {
+                    addLog(`Kontrol edilen yollar: ${result.debug.checkedPaths.join(', ')}`, 'info');
                 }
             }
         }
