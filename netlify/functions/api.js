@@ -238,6 +238,47 @@ exports.handler = async (event, context) => {
       }
     }
 
+    // XML check endpoint (basit)
+    if (path.includes('/xml/check')) {
+      const XML_FEED_URL = 'https://stildiva.sentos.com.tr/xml-sentos-out/1';
+      
+      try {
+        const response = await axios.get(XML_FEED_URL, {
+          timeout: 10000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; ShopifyXMLSync/1.0)',
+            'Accept': 'application/xml, text/xml, */*'
+          }
+        });
+
+        const isValid = response.data && response.data.includes('<Urunler>');
+        
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            success: isValid,
+            connected: isValid,
+            message: isValid ? 'XML feed bağlantısı başarılı' : 'XML formatı geçersiz',
+            url: XML_FEED_URL,
+            size: response.data ? response.data.length : 0
+          })
+        };
+
+      } catch (error) {
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            connected: false,
+            message: 'XML feed bağlantı hatası: ' + error.message,
+            url: XML_FEED_URL
+          })
+        };
+      }
+    }
+
     // XML stats endpoint
     if (path.includes('/xml/stats')) {
       const XML_FEED_URL = 'https://stildiva.sentos.com.tr/xml-sentos-out/1';
