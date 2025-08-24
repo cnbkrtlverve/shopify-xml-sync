@@ -424,19 +424,22 @@ async function updateDashboard() {
     const xmlStatus = document.getElementById('xml-status');
     const xmlSourceUrl = document.getElementById('xml-source-url');
     const xmlProducts = document.getElementById('xml-products');
+    const xmlVariants = document.getElementById('xml-variants');
+    const xmlParseMethod = document.getElementById('xml-parse-method');
+    const xmlFeatures = document.getElementById('xml-features');
     const lastChecked = document.getElementById('xml-last-checked');
 
     // AbortController ile timeout
     const xmlController = new AbortController();
     const xmlTimeoutId = setTimeout(() => xmlController.abort(), 30000); // 30 saniye
 
-    console.log('XML kontrol başlatılıyor:', {
-        url: '/api/xml/check',
+    console.log('XML stats kontrol başlatılıyor:', {
+        url: '/api/xml/stats',
         xmlUrl: config.xmlUrl,
         headers: Object.keys(apiHeaders)
     });
 
-    fetch('/api/xml/check', {
+    fetch('/api/xml/stats', {
         headers: apiHeaders,
         signal: xmlController.signal
     })
@@ -456,11 +459,38 @@ async function updateDashboard() {
                 if (data.success) {
                     xmlStatus.textContent = 'Bağlandı';
                     xmlStatus.className = 'status-badge success';
-                    xmlSourceUrl.textContent = config.xmlUrl || 'N/A';
-                    xmlProducts.textContent = data.debug?.dataLength ? 'Veri var' : 'N/A';
+                    xmlSourceUrl.textContent = data.url?.substring(0, 50) + '...' || 'N/A';
+                    xmlProducts.textContent = data.productCount || 0;
+                    xmlVariants.textContent = data.variantCount || 0;
+                    xmlParseMethod.textContent = data.debug?.parseMethod || 'N/A';
+                    
+                    // Ürün özelliklerini göster
+                    if (data.debug?.productAnalysis) {
+                        const analysis = data.debug.productAnalysis;
+                        const features = [];
+                        if (analysis.hasId) features.push('ID');
+                        if (analysis.hasName) features.push('İsim');
+                        if (analysis.hasPrice) features.push('Fiyat');
+                        if (analysis.hasStock) features.push('Stok');
+                        if (analysis.hasCategory) features.push('Kategori');
+                        if (analysis.hasImage) features.push('Resim');
+                        if (analysis.hasVariants) features.push('Varyant');
+                        
+                        xmlFeatures.textContent = features.length > 0 ? features.join(', ') : 'Temel alanlar';
+                    } else {
+                        xmlFeatures.textContent = 'Analiz edilmedi';
+                    }
+                    
                     lastChecked.textContent = new Date().toLocaleString();
+                    
+                    console.log('XML Stats:', {
+                        products: data.productCount,
+                        variants: data.variantCount,
+                        parseMethod: data.debug?.parseMethod,
+                        analysis: data.debug?.productAnalysis
+                    });
                 } else {
-                    throw new Error(data.message || 'XML\'e bağlanılamadı.');
+                    throw new Error(data.message || 'XML stats alınamadı.');
                 }
             } catch (jsonError) {
                 console.error('XML JSON Parse Error:', jsonError);
@@ -470,7 +500,7 @@ async function updateDashboard() {
         .catch(e => {
             clearTimeout(xmlTimeoutId);
             if (e.name === 'AbortError') {
-                console.log('XML zaman aşımı (6s)');
+                console.log('XML zaman aşımı (30s)');
                 xmlStatus.textContent = 'Zaman Aşımı';
             } else {
                 console.error('XML dashboard hatası:', e);
@@ -479,6 +509,9 @@ async function updateDashboard() {
             xmlStatus.className = 'status-badge error';
             xmlSourceUrl.textContent = 'N/A';
             xmlProducts.textContent = 'N/A';
+            xmlVariants.textContent = 'N/A';
+            xmlParseMethod.textContent = 'N/A';
+            xmlFeatures.textContent = 'N/A';
             lastChecked.textContent = 'N/A';
         });
     

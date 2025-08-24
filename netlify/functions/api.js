@@ -553,19 +553,113 @@ async function handleXml(action, event, headers) {
         });
         
         let productCount = 0;
+        let variantCount = 0;
         let parseMethod = 'string';
+        let productAnalysis = {};
+        let sampleProduct = null;
         
         try {
           const xml2js = require('xml2js');
           const parsed = await xml2js.parseStringPromise(response.data, {
             explicitArray: false,
-            trim: true
+            trim: true,
+            mergeAttrs: true
           });
           
-          console.log('XML parsed successfully');
+          console.log('XML parsed successfully, root keys:', Object.keys(parsed));
           
-          const products = parsed.Urunler?.Urun || [];
-          productCount = Array.isArray(products) ? products.length : (products ? 1 : 0);
+          // Çeşitli XML formatlarını kontrol et
+          let products = [];
+          let foundPath = '';
+          
+          if (parsed.catalog?.product) {
+            products = Array.isArray(parsed.catalog.product) ? parsed.catalog.product : [parsed.catalog.product];
+            foundPath = 'catalog.product';
+          } else if (parsed.products?.product) {
+            products = Array.isArray(parsed.products.product) ? parsed.products.product : [parsed.products.product];
+            foundPath = 'products.product';
+          } else if (parsed.Urunler?.Urun) {
+            products = Array.isArray(parsed.Urunler.Urun) ? parsed.Urunler.Urun : [parsed.Urunler.Urun];
+            foundPath = 'Urunler.Urun';
+          } else if (parsed.urunler?.urun) {
+            products = Array.isArray(parsed.urunler.urun) ? parsed.urunler.urun : [parsed.urunler.urun];
+            foundPath = 'urunler.urun';
+          } else if (parsed.rss?.channel?.[0]?.item) {
+            products = parsed.rss.channel[0].item;
+            foundPath = 'rss.channel[0].item';
+          } else if (parsed.root?.product) {
+            products = Array.isArray(parsed.root.product) ? parsed.root.product : [parsed.root.product];
+            foundPath = 'root.product';
+          } else if (parsed.product) {
+            products = Array.isArray(parsed.product) ? parsed.product : [parsed.product];
+            foundPath = 'product';
+          } else if (parsed.urun) {
+            products = Array.isArray(parsed.urun) ? parsed.urun : [parsed.urun];
+            foundPath = 'urun';
+          } else {
+            // Recursive search
+            const findArrays = (obj, path = '', depth = 0) => {
+              if (depth > 2) return [];
+              let arrays = [];
+              
+              if (typeof obj === 'object' && obj !== null) {
+                for (const [key, value] of Object.entries(obj)) {
+                  const currentPath = path ? `${path}.${key}` : key;
+                  
+                  if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+                    arrays.push({ path: currentPath, data: value, count: value.length });
+                  } else if (typeof value === 'object' && !Array.isArray(value)) {
+                    arrays = arrays.concat(findArrays(value, currentPath, depth + 1));
+                  }
+                }
+              }
+              return arrays;
+            };
+            
+            const foundArrays = findArrays(parsed);
+            if (foundArrays.length > 0) {
+              const bestMatch = foundArrays.sort((a, b) => b.count - a.count)[0];
+              products = bestMatch.data;
+              foundPath = bestMatch.path;
+            }
+          }
+          
+          productCount = products.length;
+          console.log(`Products found: ${productCount} in path: ${foundPath}`);
+          
+          // İlk ürünü analiz et
+          if (products.length > 0) {
+            sampleProduct = products[0];
+            const keys = Object.keys(sampleProduct);
+            
+            productAnalysis = {
+              totalFields: keys.length,
+              fieldNames: keys.slice(0, 10), // İlk 10 alan
+              hasId: !!(sampleProduct.id || sampleProduct.ID || sampleProduct.productId || sampleProduct.kod || sampleProduct.UrunKodu),
+              hasName: !!(sampleProduct.name || sampleProduct.title || sampleProduct.baslik || sampleProduct.ad || sampleProduct.UrunAdi),
+              hasPrice: !!(sampleProduct.price || sampleProduct.fiyat || sampleProduct.SatisFiyati || sampleProduct.cost),
+              hasStock: !!(sampleProduct.stock || sampleProduct.stok || sampleProduct.Stok || sampleProduct.quantity),
+              hasCategory: !!(sampleProduct.category || sampleProduct.kategori || sampleProduct.Kategori),
+              hasImage: !!(sampleProduct.image || sampleProduct.resim || sampleProduct.Resim || sampleProduct.foto),
+              hasVariants: !!(sampleProduct.variants || sampleProduct.varyantlar || sampleProduct.Varyantlar || sampleProduct.renk || sampleProduct.beden)
+            };
+            
+            // Varyant sayısını hesapla
+            products.forEach(product => {
+              if (product.variants) {
+                const variants = Array.isArray(product.variants) ? product.variants : [product.variants];
+                variantCount += variants.length;
+              } else if (product.varyantlar) {
+                const variants = Array.isArray(product.varyantlar) ? product.varyantlar : [product.varyantlar];
+                variantCount += variants.length;
+              } else if (product.renk || product.beden) {
+                variantCount += 1; // Basit varyant
+              } else {
+                variantCount += 1; // Her ürün en az 1 varyant
+              }
+            });
+          }
+          
           parseMethod = 'xml2js';
           
         } catch (parseError) {
@@ -573,12 +667,28 @@ async function handleXml(action, event, headers) {
           
           // Basit string sayma yöntemi
           const dataStr = String(response.data || '');
-          const matches = dataStr.match(/<Urun[^>]*>/g);
-          productCount = matches ? matches.length : 0;
-          parseMethod = 'regex';
+          
+          // Çeşitli ürün tag'lerini dene
+          const patterns = [
+            /<Urun[^>]*>/g,
+            /<urun[^>]*>/g,
+            /<product[^>]*>/g,
+            /<item[^>]*>/g,
+            /<entry[^>]*>/g
+          ];
+          
+          for (const pattern of patterns) {
+            const matches = dataStr.match(pattern);
+            if (matches && matches.length > 0) {
+              productCount = matches.length;
+              variantCount = productCount; // Fallback
+              parseMethod = 'regex';
+              break;
+            }
+          }
         }
 
-        console.log('XML stats completed:', { productCount, parseMethod });
+        console.log('XML stats completed:', { productCount, variantCount, parseMethod });
 
         return {
           statusCode: 200,
@@ -587,10 +697,13 @@ async function handleXml(action, event, headers) {
             success: true,
             url: XML_FEED_URL,
             productCount,
+            variantCount,
             debug: {
               parseMethod,
               dataLength: response.data?.length,
-              status: response.status
+              status: response.status,
+              productAnalysis,
+              sampleProductKeys: sampleProduct ? Object.keys(sampleProduct).slice(0, 5) : []
             }
           })
         };
