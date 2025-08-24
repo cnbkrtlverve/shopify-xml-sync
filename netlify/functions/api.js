@@ -636,22 +636,34 @@ async function handleXml(action, event, headers) {
               totalFields: keys.length,
               fieldNames: keys.slice(0, 10), // İlk 10 alan
               hasId: !!(sampleProduct.id || sampleProduct.ID || sampleProduct.productId || sampleProduct.kod || sampleProduct.UrunKodu),
-              hasName: !!(sampleProduct.name || sampleProduct.title || sampleProduct.baslik || sampleProduct.ad || sampleProduct.UrunAdi),
-              hasPrice: !!(sampleProduct.price || sampleProduct.fiyat || sampleProduct.SatisFiyati || sampleProduct.cost),
+              hasName: !!(sampleProduct.name || sampleProduct.title || sampleProduct.baslik || sampleProduct.ad || sampleProduct.UrunAdi || sampleProduct.urunismi),
+              hasPrice: !!(sampleProduct.price || sampleProduct.fiyat || sampleProduct.SatisFiyati || sampleProduct.cost || sampleProduct.satis_fiyati),
               hasStock: !!(sampleProduct.stock || sampleProduct.stok || sampleProduct.Stok || sampleProduct.quantity),
-              hasCategory: !!(sampleProduct.category || sampleProduct.kategori || sampleProduct.Kategori),
-              hasImage: !!(sampleProduct.image || sampleProduct.resim || sampleProduct.Resim || sampleProduct.foto),
-              hasVariants: !!(sampleProduct.variants || sampleProduct.varyantlar || sampleProduct.Varyantlar || sampleProduct.renk || sampleProduct.beden)
+              hasCategory: !!(sampleProduct.category || sampleProduct.kategori || sampleProduct.Kategori || sampleProduct.kategori_ismi),
+              hasImage: !!(sampleProduct.image || sampleProduct.resim || sampleProduct.Resim || sampleProduct.foto || sampleProduct.resimler),
+              hasVariants: !!(sampleProduct.Varyantlar || sampleProduct.varyantlar || sampleProduct.variants || sampleProduct.varyant_isimleri || sampleProduct.renk || sampleProduct.beden),
+              xmlFormat: 'Sentos XML Format',
+              variantStructure: sampleProduct.Varyantlar ? 'Nested Varyantlar/Varyant' : 'Unknown'
             };
             
-            // Varyant sayısını hesapla
+            // Varyant sayısını hesapla - Sentos XML formatına göre
             products.forEach(product => {
-              if (product.variants) {
+              if (product.Varyantlar && product.Varyantlar.Varyant) {
+                // Sentos XML formatı: <Varyantlar><Varyant>...
+                const variants = Array.isArray(product.Varyantlar.Varyant) ? product.Varyantlar.Varyant : [product.Varyantlar.Varyant];
+                variantCount += variants.length;
+              } else if (product.varyantlar && product.varyantlar.varyant) {
+                // Küçük harf varyant
+                const variants = Array.isArray(product.varyantlar.varyant) ? product.varyantlar.varyant : [product.varyantlar.varyant];
+                variantCount += variants.length;
+              } else if (product.variants) {
+                // Standart variants
                 const variants = Array.isArray(product.variants) ? product.variants : [product.variants];
                 variantCount += variants.length;
-              } else if (product.varyantlar) {
-                const variants = Array.isArray(product.varyantlar) ? product.varyantlar : [product.varyantlar];
-                variantCount += variants.length;
+              } else if (product.varyant_isimleri) {
+                // Varyant isimlerinden say (virgül ile ayrılmış)
+                const variantNames = String(product.varyant_isimleri).split(',').filter(v => v.trim());
+                variantCount += variantNames.length;
               } else if (product.renk || product.beden) {
                 variantCount += 1; // Basit varyant
               } else {
