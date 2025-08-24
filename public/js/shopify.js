@@ -10,38 +10,77 @@ class ShopifyService {
             throw new Error('Shopify ayarları eksik. Lütfen yapılandırma sayfasını kontrol edin.');
         }
 
-        const targetUrl = `https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`;
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
-        
-        console.log(`Proxy üzerinden istek gönderiliyor: ${proxyUrl}`);
-
-        try {
-            const response = await fetch(proxyUrl, {
-                method: method,
-                headers: {
-                    'X-Shopify-Access-Token': config.shopifyToken,
-                    'Content-Type': 'application/json'
-                },
-                body: data ? JSON.stringify(data) : null
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('Shopify API Hatası:', `Durum: ${response.status}`, errorText);
-                throw new Error(`Proxy sunucusu hata döndürdü. Durum: ${response.status}.`);
-            }
-
-            const responseText = await response.text();
-            if (!responseText) {
-                return null; // Boş yanıtlar geçerli olabilir
-            }
-            
-            return JSON.parse(responseText);
-
-        } catch (error) {
-            console.error('Ağ veya Fetch hatası:', error);
-            throw new Error(`Shopify API'ye ulaşılamadı: ${error.message}. Ağ bağlantınızı kontrol edin.`);
+        // JSONP callback yaklaşımı deneyelim
+        if (method === 'GET' && endpoint.includes('shop.json')) {
+            return await this.makeJSONPRequest(config, endpoint);
         }
+
+        // Farklı proxy servisleri deneyelim
+        const proxyServices = [
+            `https://corsproxy.io/?${encodeURIComponent(`https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`)}`,
+            `https://cors-anywhere.herokuapp.com/https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`,
+            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(`https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}`)}`
+        ];
+
+        for (let i = 0; i < proxyServices.length; i++) {
+            try {
+                console.log(`Proxy ${i + 1} deneniyor: ${proxyServices[i]}`);
+                
+                const response = await fetch(proxyServices[i], {
+                    method: method,
+                    headers: {
+                        'X-Shopify-Access-Token': config.shopifyToken,
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: data ? JSON.stringify(data) : null
+                });
+
+                if (response.ok) {
+                    const responseText = await response.text();
+                    if (!responseText) return null;
+                    return JSON.parse(responseText);
+                }
+            } catch (error) {
+                console.log(`Proxy ${i + 1} başarısız: ${error.message}`);
+                if (i === proxyServices.length - 1) {
+                    throw new Error(`Tüm proxy servisleri başarısız oldu. Son hata: ${error.message}`);
+                }
+            }
+        }
+    }
+
+    async makeJSONPRequest(config, endpoint) {
+        return new Promise((resolve, reject) => {
+            const callbackName = 'shopifyCallback' + Date.now();
+            const script = document.createElement('script');
+            const url = `https://${config.shopifyUrl}/admin/api/${this.apiVersion}${endpoint}?callback=${callbackName}`;
+            
+            // Global callback fonksiyonu oluştur
+            window[callbackName] = function(data) {
+                document.head.removeChild(script);
+                delete window[callbackName];
+                resolve(data);
+            };
+            
+            script.onerror = function() {
+                document.head.removeChild(script);
+                delete window[callbackName];
+                reject(new Error('JSONP isteği başarısız'));
+            };
+            
+            script.src = url;
+            document.head.appendChild(script);
+            
+            // Timeout ekle
+            setTimeout(() => {
+                if (window[callbackName]) {
+                    document.head.removeChild(script);
+                    delete window[callbackName];
+                    reject(new Error('JSONP isteği zaman aşımına uğradı'));
+                }
+            }, 10000);
+        });
     }
     
     async checkConnection() {
