@@ -1,352 +1,706 @@
-const axios = require('axios');
-const xml2js = require('xml2js');
-
 exports.handler = async (event, context) => {
-  const path = event.path || '';
-  const method = event.httpMethod || 'GET';
-  
-  // CORS headers
   const headers = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Shopify-Store-Url, X-Shopify-Admin-Token, X-XML-Feed-Url, X-Google-Client-Id, X-Google-Client-Secret, X-Google-Refresh-Token',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
+    'Access-Control-Allow-Headers': 'Content-Type, X-Shopify-Store-Url, X-Shopify-Admin-Token, X-XML-Feed-Url, X-Google-Client-Id, X-Google-Client-Secret, X-Google-Redirect-Uri, X-Google-Refresh-Token',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE',
+    'Content-Type': 'application/json'
   };
 
-  // OPTIONS request için
-  if (method === 'OPTIONS') {
-    return { statusCode: 200, headers, body: '' };
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers,
+      body: ''
+    };
   }
 
+async function handleConfig(action, event, headers) {
   try {
-    // Debug endpoint
-    if (path.includes('/debug/env')) {
+    // config endpoint'i için action yok, direkt POST isteği
+    if (event.httpMethod === 'POST') {
+      const body = JSON.parse(event.body || '{}');
+      
+      // Frontend'den gelen config bilgileri
+      console.log('Config kaydetme isteği alındı:', body);
+      
+      // Not: Netlify Functions'da .env dosyasını değiştirmek mümkün değil
+      // Bu endpoint sadece config'in alındığını onaylamak için
+      
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({
-          success: true,
-          environment: 'netlify',
-          timestamp: new Date().toISOString()
+        body: JSON.stringify({ 
+          success: true, 
+          message: 'Ayarlar alındı. Not: Netlify\'da ayarlar Environment Variables üzerinden yapılmalıdır.' 
         })
       };
     }
 
-    // Shopify check endpoint  
-    if (path.includes('/shopify/check')) {
-      // Netlify Functions'ta header'lar event.headers'da gelir (lowercase)
-      const requestHeaders = event.headers || {};
-      const shopUrl = requestHeaders['x-shopify-shop-url'] || requestHeaders['X-Shopify-Shop-Url'];
-      const accessToken = requestHeaders['x-shopify-access-token'] || requestHeaders['X-Shopify-Access-Token'];
-      
-      if (!shopUrl || !accessToken) {
-        return {
-          statusCode: 400,
-          headers,
-          body: JSON.stringify({
-            success: false,
-            connected: false,
-            message: 'Shopify bilgileri eksik. Store URL ve Access Token gerekli.'
-          })
-        };
-      }
-      
+    return {
+      statusCode: 405,
+      headers,
+      body: JSON.stringify({ error: 'Sadece POST metodu desteklenir' })
+    };
+  } catch (error) {
+    console.error('Config handler error:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ 
+        success: false,
+        error: 'Config handler hatası',
+        message: error.message
+      })
+    };
+  }
+}
+
+async function handleDebug(action, event, headers) {
+  try {
+    if (action === 'env') {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          environment: {
+            SHOPIFY_STORE_URL: process.env.SHOPIFY_STORE_URL || 'NOT_SET',
+            SHOPIFY_ADMIN_API_TOKEN: process.env.SHOPIFY_ADMIN_API_TOKEN ? 'SET' : 'NOT_SET',
+            XML_FEED_URL: process.env.XML_FEED_URL || 'NOT_SET',
+            NODE_ENV: process.env.NODE_ENV || 'NOT_SET',
+            netlifyContext: event.headers['x-nf-request-id'] ? 'NETLIFY' : 'LOCAL'
+          }
+        })
+      };
+    }
+
+    return {
+      statusCode: 404,
+      headers,
+      body: JSON.stringify({ error: 'Debug action bulunamadı' })
+    };
+  } catch (error) {
+    console.error('Debug handler error:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ 
+        error: 'Debug handler hatası',
+        message: error.message
+      })
+    };
+  }
+}
+
+  try {
+    const path = event.path.replace('/api/', '');
+    const segments = path.split('/');
+    const service = segments[0];
+    const action = segments[1];
+
+    console.log('API Request:', { 
+      path, 
+      service, 
+      action, 
+      method: event.httpMethod,
+      queryParams: event.queryStringParameters 
+    });
+
+    let result;
+    
+    if (service === 'config') {
+      result = await handleConfig(action, event, headers);
+    } else if (service === 'debug') {
+      result = await handleDebug(action, event, headers);
+    } else if (service === 'shopify') {
+      result = await handleShopify(action, event, headers);
+    } else if (service === 'xml') {
+      result = await handleXml(action, event, headers);
+    } else if (service === 'sync') {
+      result = await handleSync(action, event, headers);
+    } else if (service === 'google') {
+      result = await handleGoogle(action, event, headers);
+    } else {
+      result = {
+        statusCode: 404,
+        headers,
+        body: JSON.stringify({ error: 'Endpoint bulunamadı', path, service, action })
+      };
+    }
+
+    // JSON formatı kontrolü
+    if (result.body) {
       try {
-        // Shopify Admin API test
-        const shopifyResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/shop.json`, {
-          headers: {
-            'X-Shopify-Access-Token': accessToken,
-            'Content-Type': 'application/json'
-          },
-          timeout: 10000
-        });
-        
-        const shopData = shopifyResponse.data.shop;
+        JSON.parse(result.body);
+      } catch (jsonError) {
+        console.error('Invalid JSON response:', result.body);
+        result.body = JSON.stringify({ error: 'Invalid JSON response', original: result.body });
+      }
+    }
+
+    console.log('API Response:', { statusCode: result.statusCode, bodyLength: result.body?.length });
+    return result;
+
+  } catch (error) {
+    console.error('API Main Error:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ 
+        error: 'Server error',
+        message: error.message,
+        stack: error.stack
+      })
+    };
+  }
+};
+
+async function handleShopify(action, event, headers) {
+  try {
+    console.log('=== SHOPIFY HANDLER START ===');
+    console.log('Action:', action);
+    console.log('Headers received:', Object.keys(event.headers || {}));
+    console.log('Relevant headers:', {
+      'x-shopify-store-url': event.headers['x-shopify-store-url'],
+      'x-shopify-admin-token': event.headers['x-shopify-admin-token']
+    });
+    
+    const axios = require('axios');
+    
+    // Önce environment variables'dan, sonra header'lardan al (case-insensitive)
+    let SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || 
+                           event.headers['x-shopify-store-url'] || 
+                           event.headers['X-Shopify-Store-Url'];
+    let SHOPIFY_ADMIN_API_TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN || 
+                                 event.headers['x-shopify-admin-token'] || 
+                                 event.headers['X-Shopify-Admin-Token'];
+
+    console.log('Shopify ENV + Header check:', { 
+      hasStoreUrl: !!SHOPIFY_STORE_URL, 
+      hasToken: !!SHOPIFY_ADMIN_API_TOKEN,
+      storeUrl: SHOPIFY_STORE_URL?.substring(0, 20) + '...',
+      source: process.env.SHOPIFY_STORE_URL ? 'env' : 'header'
+    });
+
+    if (!SHOPIFY_STORE_URL || !SHOPIFY_ADMIN_API_TOKEN) {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ 
+          success: false, 
+          message: 'Shopify ayarları eksik',
+          debug: {
+            SHOPIFY_STORE_URL: !!SHOPIFY_STORE_URL,
+            SHOPIFY_ADMIN_API_TOKEN: !!SHOPIFY_ADMIN_API_TOKEN,
+            envVars: {
+              SHOPIFY_STORE_URL: !!process.env.SHOPIFY_STORE_URL,
+              SHOPIFY_ADMIN_API_TOKEN: !!process.env.SHOPIFY_ADMIN_API_TOKEN
+            },
+            headers: {
+              storeUrl: !!event.headers['x-shopify-store-url'],
+              token: !!event.headers['x-shopify-admin-token']
+            }
+          }
+        })
+      };
+    }
+
+    // URL formatını düzelt
+    let shopUrl = SHOPIFY_STORE_URL;
+    if (!shopUrl.includes('.myshopify.com')) {
+      shopUrl = shopUrl.replace('https://', '').replace('http://', '');
+      shopUrl = `https://${shopUrl}.myshopify.com`;
+    }
+    if (!shopUrl.startsWith('https://')) {
+      shopUrl = `https://${shopUrl}`;
+    }
+
+    console.log('Shopify URL formatı:', {
+      original: SHOPIFY_STORE_URL,
+      formatted: shopUrl
+    });
+
+    const shopifyApi = axios.create({
+      baseURL: `${shopUrl}/admin/api/2024-07`,
+      headers: { 
+        'X-Shopify-Access-Token': SHOPIFY_ADMIN_API_TOKEN,
+        'Content-Type': 'application/json'
+      },
+      timeout: 15000
+    });
+
+    if (action === 'check') {
+      try {
+        console.log('Shopify check starting');
+        const response = await shopifyApi.get('/shop.json');
+        console.log('Shopify check successful:', response.status);
         
         return {
           statusCode: 200,
           headers,
-          body: JSON.stringify({
-            success: true,
-            connected: true,
-            store: shopData.name,
-            email: shopData.email,
-            domain: shopData.domain,
-            productCount: 0,
-            currency: shopData.currency,
-            timezone: shopData.timezone
+          body: JSON.stringify({ 
+            success: true, 
+            message: 'Başarılı',
+            debug: {
+              status: response.status,
+              shopName: response.data?.shop?.name
+            }
           })
         };
-        
       } catch (error) {
-        console.error('Shopify check hatası:', error.response?.status, error.response?.data);
+        console.error('Shopify check error:', {
+          message: error.message,
+          status: error.response?.status,
+          statusText: error.response?.statusText
+        });
         
         return {
-          statusCode: 400,
+          statusCode: 200,
           headers,
-          body: JSON.stringify({
-            success: false,
-            connected: false,
-            message: 'Shopify bağlantısı başarısız: ' + (error.response?.data?.errors || error.message),
-            status: error.response?.status,
+          body: JSON.stringify({ 
+            success: false, 
+            message: 'Bağlantı hatası: ' + error.message,
             debug: {
-              shopUrl: shopUrl,
-              hasToken: !!accessToken,
-              errorType: error.code,
-              statusCode: error.response?.status
+              status: error.response?.status,
+              statusText: error.response?.statusText,
+              code: error.code
             }
           })
         };
       }
     }
 
-    // Shopify info endpoint
-    if (path.includes('/shopify/info')) {
-      // Netlify Functions'ta header'lar event.headers'da gelir (lowercase)
-      const requestHeaders = event.headers || {};
-      const shopUrl = requestHeaders['x-shopify-shop-url'] || requestHeaders['X-Shopify-Shop-Url'];
-      const accessToken = requestHeaders['x-shopify-access-token'] || requestHeaders['X-Shopify-Access-Token'];
-      
-      if (!shopUrl || !accessToken) {
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({
-            success: false,
-            connected: false,
-            store: 'Bağlantı yok',
-            email: 'Shopify bilgilerini kontrol edin',
-            productCount: 0
-          })
-        };
-      }
-      
-        try {
-          // Shopify Admin API'ye gerçek çağrı
-          const shopifyResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/shop.json`, {
-            headers: {
-              'X-Shopify-Access-Token': accessToken,
-              'Content-Type': 'application/json'
-            },
-            timeout: 10000
-          });
-          
-          // Ürün sayısını al
-          let productCount = 0;
-          try {
-            const productsResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/products/count.json`, {
-              headers: {
-                'X-Shopify-Access-Token': accessToken,
-                'Content-Type': 'application/json'
-              },
-              timeout: 5000
-            });
-            productCount = productsResponse.data.count || 0;
-          } catch (countError) {
-            console.log('Ürün sayısı alınamadı:', countError.message);
-          }
-          
-          const shopData = shopifyResponse.data.shop;
-          
-          return {
-            statusCode: 200,
-            headers,
-            body: JSON.stringify({
-              success: true,
-              connected: true,
-              store: shopData.name,
-              email: shopData.email,
-              domain: shopData.domain,
-              productCount: productCount,
-              currency: shopData.currency,
-              timezone: shopData.timezone
-            })
-          };      } catch (error) {
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({
-            success: false,
-            connected: false,
-            store: 'Bağlantı hatası',
-            email: error.response?.data?.errors || error.message,
-            productCount: 0
-          })
-        };
-      }
-    }
-
-    // XML analyze endpoint
-    if (path.includes('/xml/analyze')) {
-      const XML_FEED_URL = 'https://stildiva.sentos.com.tr/xml-sentos-out/1';
-      
+    if (action === 'info') {
       try {
-        const response = await axios.get(XML_FEED_URL, {
-          timeout: 25000,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; ShopifyXMLSync/1.0)',
-            'Accept': 'application/xml, text/xml, */*'
-          }
-        });
-
-        const parsed = await xml2js.parseStringPromise(response.data, {
-          explicitArray: false,
-          trim: true,
-          mergeAttrs: true
-        });
-
-        const products = Array.isArray(parsed.Urunler.Urun) ? parsed.Urunler.Urun : [parsed.Urunler.Urun];
+        console.log('Shopify info starting - URL:', SHOPIFY_STORE_URL);
         
-        // Variant sayısını hesapla
-        let totalVariants = 0;
-        products.forEach(product => {
-          if (product.Varyantlar && product.Varyantlar.Varyant) {
-            const variants = Array.isArray(product.Varyantlar.Varyant) 
-              ? product.Varyantlar.Varyant 
-              : [product.Varyantlar.Varyant];
-            totalVariants += variants.length;
-          } else {
-            totalVariants += 1; // Varyantı yoksa kendisi 1 variant
-          }
+        const [shopResponse, countResponse] = await Promise.all([
+          shopifyApi.get('/shop.json'),
+          shopifyApi.get('/products/count.json')
+        ]);
+        
+        console.log('Shopify info responses received:', {
+          shopStatus: shopResponse.status,
+          countStatus: countResponse.status,
+          shopName: shopResponse.data?.shop?.name
         });
-
-        return {
+        
+        const result = {
           statusCode: 200,
           headers,
           body: JSON.stringify({
             success: true,
-            products: products.slice(0, 5).map(p => ({
-              id: p.id,
-              name: p.urunismi,
-              price: p.satis_fiyati || p.alis_fiyati,
-              variants: p.Varyantlar ? (Array.isArray(p.Varyantlar.Varyant) ? p.Varyantlar.Varyant.length : 1) : 1
-            })),
-            totalProducts: products.length,
-            totalVariants: totalVariants,
-            xmlFormat: 'Sentos XML Format'
+            name: shopResponse.data.shop.name,
+            email: shopResponse.data.shop.email,
+            productCount: countResponse.data.count,
+            debug: {
+              shopStatus: shopResponse.status,
+              countStatus: countResponse.status
+            }
           })
         };
         
+        console.log('Shopify info final result:', result);
+        return result;
       } catch (error) {
+        console.error('Shopify info error:', {
+          message: error.message,
+          status: error.response?.status,
+          statusText: error.response?.statusText
+        });
+        
         return {
-          statusCode: 500,
+          statusCode: 200,
           headers,
-          body: JSON.stringify({
-            success: false,
-            error: 'XML analiz hatası: ' + error.message
+          body: JSON.stringify({ 
+            success: false, 
+            message: 'Shopify bilgileri alınamadı: ' + error.message,
+            debug: {
+              status: error.response?.status,
+              statusText: error.response?.statusText,
+              code: error.code
+            }
           })
         };
       }
     }
 
-    // XML check endpoint (basit)
-    if (path.includes('/xml/check')) {
-      const XML_FEED_URL = 'https://stildiva.sentos.com.tr/xml-sentos-out/1';
-      
+    if (action === 'search') {
+      const query = event.queryStringParameters?.q;
+      if (!query) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({ success: false, message: 'Arama sorgusu gerekli' })
+        };
+      }
+
       try {
-        const response = await axios.get(XML_FEED_URL, {
-          timeout: 10000,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; ShopifyXMLSync/1.0)',
-            'Accept': 'application/xml, text/xml, */*'
+        console.log('Shopify search starting for query:', query);
+        
+        const graphqlQuery = {
+          query: `
+          query productSearch($query: String!) {
+            products(first: 10, query: $query) {
+              edges {
+                node {
+                  id
+                  title
+                  handle
+                  variants(first: 20) {
+                    edges {
+                      node {
+                        id
+                        title
+                        sku
+                        price
+                        barcode
+                        inventoryQuantity
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
+          `,
+          variables: { query: `title:*${query}* OR sku:${query}` },
+        };
+
+        const response = await shopifyApi.post('/graphql.json', graphqlQuery);
+        console.log('Shopify search successful');
+        
+        const products = response.data.data.products.edges.map((edge) => {
+          return {
+            ...edge.node,
+            variants: edge.node.variants.edges.map((vEdge) => vEdge.node)
+          };
         });
 
-        const isValid = response.data && response.data.includes('<Urunler>');
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({ 
+            success: true, 
+            products,
+            debug: {
+              status: response.status,
+              resultCount: products.length
+            }
+          })
+        };
+      } catch (error) {
+        console.error('Shopify search error:', {
+          message: error.message,
+          status: error.response?.status
+        });
         
         return {
           statusCode: 200,
           headers,
-          body: JSON.stringify({
-            success: isValid,
-            connected: isValid,
-            message: isValid ? 'XML feed bağlantısı başarılı' : 'XML formatı geçersiz',
-            url: XML_FEED_URL,
-            size: response.data ? response.data.length : 0
-          })
-        };
-
-      } catch (error) {
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({
-            success: false,
-            connected: false,
-            message: 'XML feed bağlantı hatası: ' + error.message,
-            url: XML_FEED_URL
+          body: JSON.stringify({ 
+            success: false, 
+            products: [],
+            message: 'Arama hatası: ' + error.message
           })
         };
       }
     }
 
-    // XML stats endpoint
-    if (path.includes('/xml/stats')) {
-      const XML_FEED_URL = 'https://stildiva.sentos.com.tr/xml-sentos-out/1';
-      
+    return {
+      statusCode: 404,
+      headers,
+      body: JSON.stringify({ error: 'Shopify action bulunamadı: ' + action })
+    };
+
+  } catch (error) {
+    console.error('Shopify handler error:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ 
+        error: 'Shopify handler hatası',
+        message: error.message,
+        stack: error.stack?.substring(0, 500)
+      })
+    };
+  }
+}
+
+async function handleXml(action, event, headers) {
+  try {
+    const axios = require('axios');
+    
+    // Önce environment variables'dan, sonra header'lardan al (case-insensitive)
+    let XML_FEED_URL = process.env.XML_FEED_URL || 
+                      event.headers['x-xml-feed-url'] || 
+                      event.headers['X-XML-Feed-Url'];
+    
+    console.log('XML ENV + Header check:', { 
+      hasXmlUrl: !!XML_FEED_URL,
+      xmlUrl: XML_FEED_URL?.substring(0, 50) + '...',
+      source: process.env.XML_FEED_URL ? 'env' : 'header'
+    });
+
+    if (!XML_FEED_URL) {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ 
+          success: false, 
+          message: 'XML URL eksik',
+          debug: {
+            envVar: !!process.env.XML_FEED_URL,
+            header: !!event.headers['x-xml-feed-url'],
+            message: 'XML URL hem environment variable\'da hem header\'da bulunamadı'
+          }
+        })
+      };
+    }
+
+    if (action === 'check') {
       try {
-        const response = await axios.get(XML_FEED_URL, {
-          timeout: 25000,
+        console.log('XML check starting for:', XML_FEED_URL);
+        
+        const response = await axios.get(XML_FEED_URL, { 
+          timeout: 25000, // 25 saniye
           headers: {
             'User-Agent': 'Mozilla/5.0 (compatible; ShopifyXMLSync/1.0)',
-            'Accept': 'application/xml, text/xml, */*'
+            'Accept': 'application/xml, text/xml, */*',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Cache-Control': 'no-cache'
+          },
+          validateStatus: function (status) {
+            return status >= 200 && status < 300;
           }
         });
+        
+        console.log('XML check response:', { 
+          status: response.status, 
+          contentType: response.headers['content-type'],
+          dataLength: response.data?.length 
+        });
+        
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({ 
+            success: true, 
+            message: 'XML bağlantısı başarılı',
+            debug: {
+              status: response.status,
+              contentType: response.headers['content-type'],
+              dataLength: response.data?.length
+            }
+          })
+        };
+      } catch (error) {
+        console.error('XML check error:', {
+          message: error.message,
+          code: error.code,
+          status: error.response?.status,
+          url: XML_FEED_URL
+        });
+        
+        let errorMessage = 'XML bağlantı hatası: ';
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+          errorMessage += 'Bağlantı zaman aşımına uğradı (25s)';
+        } else if (error.code === 'ENOTFOUND') {
+          errorMessage += 'XML URL\'si bulunamadı';
+        } else if (error.code === 'ECONNREFUSED') {
+          errorMessage += 'Bağlantı reddedildi';
+        } else {
+          errorMessage += error.message;
+        }
+        
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({ 
+            success: false, 
+            message: errorMessage,
+            debug: {
+              code: error.code,
+              status: error.response?.status,
+              url: XML_FEED_URL?.substring(0, 100) + '...',
+              timeout: '25 saniye'
+            }
+          })
+        };
+      }
+    }
 
+    if (action === 'stats') {
+      try {
+        console.log('XML stats starting for:', XML_FEED_URL);
+        
+        const response = await axios.get(XML_FEED_URL, { 
+          timeout: 25000, // 25 saniye
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; ShopifyXMLSync/1.0)',
+            'Accept': 'application/xml, text/xml, */*',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Cache-Control': 'no-cache'
+          },
+          validateStatus: function (status) {
+            return status >= 200 && status < 300; // Sadece 2xx kodları kabul et
+          }
+        });
+        
+        console.log('XML stats response received:', {
+          status: response.status,
+          contentType: response.headers['content-type'],
+          dataLength: response.data?.length
+        });
+        
         let productCount = 0;
         let variantCount = 0;
         let parseMethod = 'string';
         let productAnalysis = {};
         let sampleProduct = null;
-
+        
         try {
+          const xml2js = require('xml2js');
           const parsed = await xml2js.parseStringPromise(response.data, {
             explicitArray: false,
             trim: true,
             mergeAttrs: true
           });
-
-          // Sentos XML formatı: Urunler > Urun
-          const products = Array.isArray(parsed.Urunler.Urun) ? parsed.Urunler.Urun : [parsed.Urunler.Urun];
+          
+          console.log('XML parsed successfully, root keys:', Object.keys(parsed));
+          
+          // Çeşitli XML formatlarını kontrol et
+          let products = [];
+          let foundPath = '';
+          
+          if (parsed.catalog?.product) {
+            products = Array.isArray(parsed.catalog.product) ? parsed.catalog.product : [parsed.catalog.product];
+            foundPath = 'catalog.product';
+          } else if (parsed.products?.product) {
+            products = Array.isArray(parsed.products.product) ? parsed.products.product : [parsed.products.product];
+            foundPath = 'products.product';
+          } else if (parsed.Urunler?.Urun) {
+            products = Array.isArray(parsed.Urunler.Urun) ? parsed.Urunler.Urun : [parsed.Urunler.Urun];
+            foundPath = 'Urunler.Urun';
+          } else if (parsed.urunler?.urun) {
+            products = Array.isArray(parsed.urunler.urun) ? parsed.urunler.urun : [parsed.urunler.urun];
+            foundPath = 'urunler.urun';
+          } else if (parsed.rss?.channel?.[0]?.item) {
+            products = parsed.rss.channel[0].item;
+            foundPath = 'rss.channel[0].item';
+          } else if (parsed.root?.product) {
+            products = Array.isArray(parsed.root.product) ? parsed.root.product : [parsed.root.product];
+            foundPath = 'root.product';
+          } else if (parsed.product) {
+            products = Array.isArray(parsed.product) ? parsed.product : [parsed.product];
+            foundPath = 'product';
+          } else if (parsed.urun) {
+            products = Array.isArray(parsed.urun) ? parsed.urun : [parsed.urun];
+            foundPath = 'urun';
+          } else {
+            // Recursive search
+            const findArrays = (obj, path = '', depth = 0) => {
+              if (depth > 2) return [];
+              let arrays = [];
+              
+              if (typeof obj === 'object' && obj !== null) {
+                for (const [key, value] of Object.entries(obj)) {
+                  const currentPath = path ? `${path}.${key}` : key;
+                  
+                  if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+                    arrays.push({ path: currentPath, data: value, count: value.length });
+                  } else if (typeof value === 'object' && !Array.isArray(value)) {
+                    arrays = arrays.concat(findArrays(value, currentPath, depth + 1));
+                  }
+                }
+              }
+              return arrays;
+            };
+            
+            const foundArrays = findArrays(parsed);
+            if (foundArrays.length > 0) {
+              const bestMatch = foundArrays.sort((a, b) => b.count - a.count)[0];
+              products = bestMatch.data;
+              foundPath = bestMatch.path;
+            }
+          }
+          
           productCount = products.length;
+          console.log(`Products found: ${productCount} in path: ${foundPath}`);
           
           // İlk ürünü analiz et
           if (products.length > 0) {
             sampleProduct = products[0];
+            const keys = Object.keys(sampleProduct);
             
             productAnalysis = {
-              totalFields: Object.keys(sampleProduct).length,
-              fieldNames: Object.keys(sampleProduct).slice(0, 10),
-              hasId: !!sampleProduct.id,
-              hasName: !!sampleProduct.urunismi,
-              hasPrice: !!(sampleProduct.alis_fiyati || sampleProduct.satis_fiyati),
-              hasStock: !!sampleProduct.stok,
-              hasCategory: !!sampleProduct.kategori_ismi,
-              hasImage: !!sampleProduct.resimler,
-              hasVariants: !!sampleProduct.Varyantlar,
+              totalFields: keys.length,
+              fieldNames: keys.slice(0, 10), // İlk 10 alan
+              hasId: !!(sampleProduct.id || sampleProduct.ID || sampleProduct.productId || sampleProduct.kod || sampleProduct.UrunKodu),
+              hasName: !!(sampleProduct.name || sampleProduct.title || sampleProduct.baslik || sampleProduct.ad || sampleProduct.UrunAdi || sampleProduct.urunismi),
+              hasPrice: !!(sampleProduct.price || sampleProduct.fiyat || sampleProduct.SatisFiyati || sampleProduct.cost || sampleProduct.satis_fiyati),
+              hasStock: !!(sampleProduct.stock || sampleProduct.stok || sampleProduct.Stok || sampleProduct.quantity),
+              hasCategory: !!(sampleProduct.category || sampleProduct.kategori || sampleProduct.Kategori || sampleProduct.kategori_ismi),
+              hasImage: !!(sampleProduct.image || sampleProduct.resim || sampleProduct.Resim || sampleProduct.foto || sampleProduct.resimler),
+              hasVariants: !!(sampleProduct.Varyantlar || sampleProduct.varyantlar || sampleProduct.variants || sampleProduct.varyant_isimleri || sampleProduct.renk || sampleProduct.beden),
               xmlFormat: 'Sentos XML Format',
-              variantStructure: 'Nested Varyantlar/Varyant'
+              variantStructure: sampleProduct.Varyantlar ? 'Nested Varyantlar/Varyant' : 'Unknown'
             };
-
-            // Toplam varyant sayısını hesapla
+            
+            // Varyant sayısını hesapla - Sentos XML formatına göre
             products.forEach(product => {
               if (product.Varyantlar && product.Varyantlar.Varyant) {
-                const variants = Array.isArray(product.Varyantlar.Varyant) 
-                  ? product.Varyantlar.Varyant 
-                  : [product.Varyantlar.Varyant];
+                // Sentos XML formatı: <Varyantlar><Varyant>...
+                const variants = Array.isArray(product.Varyantlar.Varyant) ? product.Varyantlar.Varyant : [product.Varyantlar.Varyant];
                 variantCount += variants.length;
+              } else if (product.varyantlar && product.varyantlar.varyant) {
+                // Küçük harf varyant
+                const variants = Array.isArray(product.varyantlar.varyant) ? product.varyantlar.varyant : [product.varyantlar.varyant];
+                variantCount += variants.length;
+              } else if (product.variants) {
+                // Standart variants
+                const variants = Array.isArray(product.variants) ? product.variants : [product.variants];
+                variantCount += variants.length;
+              } else if (product.varyant_isimleri) {
+                // Varyant isimlerinden say (virgül ile ayrılmış)
+                const variantNames = String(product.varyant_isimleri).split(',').filter(v => v.trim());
+                variantCount += variantNames.length;
+              } else if (product.renk || product.beden) {
+                variantCount += 1; // Basit varyant
               } else {
                 variantCount += 1; // Her ürün en az 1 varyant
               }
             });
           }
-
+          
           parseMethod = 'xml2js';
+          
         } catch (parseError) {
-          console.warn('XML parsing failed:', parseError.message);
-          productCount = 1623; // Fallback
-          variantCount = 10283; // Fallback
-          parseMethod = 'fallback';
+          console.warn('XML parsing failed, using string count:', parseError.message);
+          
+          // Basit string sayma yöntemi
+          const dataStr = String(response.data || '');
+          
+          // Çeşitli ürün tag'lerini dene
+          const patterns = [
+            /<Urun[^>]*>/g,
+            /<urun[^>]*>/g,
+            /<product[^>]*>/g,
+            /<item[^>]*>/g,
+            /<entry[^>]*>/g
+          ];
+          
+          for (const pattern of patterns) {
+            const matches = dataStr.match(pattern);
+            if (matches && matches.length > 0) {
+              productCount = matches.length;
+              variantCount = productCount; // Fallback
+              parseMethod = 'regex';
+              break;
+            }
+          }
         }
+
+        console.log('XML stats completed:', { productCount, variantCount, parseMethod });
 
         return {
           statusCode: 200,
@@ -365,770 +719,594 @@ exports.handler = async (event, context) => {
             }
           })
         };
+        
       } catch (error) {
+        console.error('XML stats error:', {
+          message: error.message,
+          code: error.code,
+          status: error.response?.status,
+          url: XML_FEED_URL
+        });
+        
+        let errorMessage = 'XML stats alınamadı: ';
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+          errorMessage += 'Bağlantı zaman aşımına uğradı (25s)';
+        } else if (error.code === 'ENOTFOUND') {
+          errorMessage += 'XML URL\'si bulunamadı';
+        } else if (error.code === 'ECONNREFUSED') {
+          errorMessage += 'Bağlantı reddedildi';
+        } else {
+          errorMessage += error.message;
+        }
+        
         return {
           statusCode: 200,
           headers,
           body: JSON.stringify({ 
             success: false, 
-            message: 'XML alınamadı: ' + error.message
+            message: errorMessage,
+            debug: {
+              code: error.code,
+              status: error.response?.status,
+              url: XML_FEED_URL?.substring(0, 100) + '...',
+              timeout: '25 saniye'
+            }
           })
         };
       }
     }
 
-    // Google status endpoint
-    if (path.includes('/google/status')) {
+    return {
+      statusCode: 404,
+      headers,
+      body: JSON.stringify({ error: 'XML action bulunamadı: ' + action })
+    };
+
+  } catch (error) {
+    console.error('XML handler error:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ 
+        error: 'XML handler hatası',
+        message: error.message,
+        stack: error.stack?.substring(0, 500)
+      })
+    };
+  }
+}
+
+async function handleSync(action, event, headers) {
+  try {
+    const axios = require('axios');
+    const xml2js = require('xml2js');
+    
+    // Environment variables veya header'lardan config al
+    const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL || 
+                             event.headers['x-shopify-store-url'] || 
+                             event.headers['X-Shopify-Store-Url'];
+    const SHOPIFY_ADMIN_API_TOKEN = process.env.SHOPIFY_ADMIN_API_TOKEN || 
+                                   event.headers['x-shopify-admin-token'] || 
+                                   event.headers['X-Shopify-Admin-Token'];
+    const XML_FEED_URL = process.env.XML_FEED_URL || 
+                        event.headers['x-xml-feed-url'] || 
+                        event.headers['X-XML-Feed-Url'];
+
+    if (!SHOPIFY_STORE_URL || !SHOPIFY_ADMIN_API_TOKEN || !XML_FEED_URL) {
       return {
-        statusCode: 200,
+        statusCode: 400,
         headers,
         body: JSON.stringify({
-          success: true,
-          connected: false,
-          isAuthenticated: false,
-          hasConfig: false
+          success: false,
+          message: 'Shopify veya XML konfigürasyonu eksik'
         })
       };
     }
 
-    // Config endpoint
-    if (path.includes('/config')) {
-      if (method === 'POST') {
-        // Config kaydetme
-        try {
-          const body = JSON.parse(event.body || '{}');
-          console.log('Config kaydediliyor:', Object.keys(body));
-          
-          // Config'i memory'de saklayalım (gerçek uygulamada database kullanılır)
-          global.appConfig = global.appConfig || {};
-          global.appConfig = { ...global.appConfig, ...body };
-          
-          return {
-            statusCode: 200,
-            headers,
-            body: JSON.stringify({
-              success: true,
-              message: 'Konfigürasyon başarıyla kaydedildi',
-              saved: Object.keys(body)
-            })
-          };
-        } catch (error) {
-          return {
-            statusCode: 400,
-            headers,
-            body: JSON.stringify({
-              success: false,
-              message: 'Config kaydetme hatası: ' + error.message
-            })
-          };
-        }
-      } else if (method === 'GET') {
-        // Config okuma
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({
-            success: true,
-            config: global.appConfig || {}
-          })
-        };
-      }
-    }
-
-    // Sync summary endpoint
-    if (path.includes('/sync/summary')) {
+    if (action === 'summary') {
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({
           success: true,
-          summary: 'Henüz senkronizasyon yapılmadı',
+          summary: 'Henüz bir senkronizasyon yapılmadı.',
           lastSync: null,
           processedCount: 0
         })
       };
     }
 
-    // XML'den Shopify'a ürün dönüştürme fonksiyonu
-    const convertXmlToShopifyProduct = (xmlProduct) => {
-      // Fiyat analizi
-      let price = 0;
-      const alisFiyati = String(xmlProduct.alis_fiyati || '0').replace(',', '.');
-      const satisFiyati = String(xmlProduct.satis_fiyati || '0').replace(',', '.');
-      const indirimlifiyat = String(xmlProduct.indirimli_fiyat || '0').replace(',', '.');
+    if (event.httpMethod === 'POST') {
+      const body = JSON.parse(event.body || '{}');
+      const options = body.options || {};
       
-      if (parseFloat(indirimlifiyat) > 0) {
-        price = parseFloat(indirimlifiyat);
-      } else if (parseFloat(satisFiyati) > 0) {
-        price = parseFloat(satisFiyati);
-      } else {
-        price = parseFloat(alisFiyati) * 1.5; // %50 kar marjı
-      }
-      
-      // Kategori parse
-      const kategori = String(xmlProduct.kategori_ismi || '');
-      const kategoriParts = kategori.split(' > ').filter(k => k.trim());
-      const productType = kategoriParts[kategoriParts.length - 1] || 'Genel';
-      
-      // Tags
-      const tags = [
-        ...kategoriParts,
-        xmlProduct.marka || 'Stil Diva'
-      ].filter(tag => tag && tag.trim()).join(',');
-      
-      // Handle (URL slug)
-      const handle = String(xmlProduct.urunismi || '')
-        .toLowerCase()
-        .replace(/[^\w\s-]/g, '')
-        .replace(/\s+/g, '-')
-        .substring(0, 100);
-      
-      // Varyantları işle
-      const variants = [];
-      const options = [];
-      const colorSet = new Set();
-      const sizeSet = new Set();
-      const images = [];
-      
-      if (xmlProduct.Varyantlar && xmlProduct.Varyantlar.Varyant) {
-        const variantList = Array.isArray(xmlProduct.Varyantlar.Varyant) 
-          ? xmlProduct.Varyantlar.Varyant 
-          : [xmlProduct.Varyantlar.Varyant];
-        
-        variantList.forEach((variant, index) => {
-          const color = variant.renk || 'Varsayılan';
-          const size = variant.Varyant_deger || 'Tek Beden';
-          const variantStock = parseInt(variant.stok || '0');
-          
-          colorSet.add(color);
-          sizeSet.add(size);
-          
-          variants.push({
-            title: `${color} / ${size}`,
-            price: price.toFixed(2),
-            sku: variant.stok_kodu || `${xmlProduct.id}-${index}`,
-            inventory_quantity: variantStock,
-            inventory_management: 'shopify',
-            inventory_policy: variantStock > 0 ? 'deny' : 'continue',
-            barcode: variant.barkod || '',
-            option1: color,
-            option2: size,
-            weight: 0.5,
-            weight_unit: 'kg'
-          });
-          
-          // Varyant resimlerini ekle
-          if (variant.resimler && variant.resimler.resim) {
-            const variantImages = Array.isArray(variant.resimler.resim) 
-              ? variant.resimler.resim 
-              : [variant.resimler.resim];
-            
-            variantImages.forEach(imgUrl => {
-              if (imgUrl && !images.find(img => img.src === imgUrl)) {
-                images.push({
-                  src: imgUrl,
-                  alt: xmlProduct.urunismi || 'Ürün Resmi',
-                  position: images.length + 1
-                });
-              }
-            });
-          }
-        });
-      } else {
-        // Varyantı olmayan ürünler için default
-        variants.push({
-          title: 'Varsayılan',
-          price: price.toFixed(2),
-          sku: xmlProduct.stok_kodu || xmlProduct.id,
-          inventory_quantity: parseInt(xmlProduct.stok || '0'),
-          inventory_management: 'shopify',
-          inventory_policy: 'deny',
-          barcode: xmlProduct.barkod || '',
-          option1: 'Varsayılan',
-          weight: 0.5,
-          weight_unit: 'kg'
-        });
-        
-        colorSet.add('Varsayılan');
-      }
-      
-      // Options oluştur
-      if (colorSet.size > 0) {
-        options.push({
-          name: 'Renk',
-          values: Array.from(colorSet)
-        });
-      }
-      
-      if (sizeSet.size > 0 && !sizeSet.has('Tek Beden')) {
-        options.push({
-          name: 'Beden',
-          values: Array.from(sizeSet)
-        });
-      }
-      
-      return {
-        title: xmlProduct.urunismi || 'Ürün Adı Yok',
-        body_html: xmlProduct.detayaciklama || '<p>Ürün açıklaması.</p>',
-        vendor: xmlProduct.marka || 'Stil Diva',
-        product_type: productType,
-        status: 'active',
-        tags: tags,
-        handle: handle,
-        variants: variants,
-        options: options,
-        images: images.slice(0, 10) // İlk 10 resim
-      };
-    };
-
-    // Basit sync endpoint
-    if (path.includes('/sync/start')) {
-      const requestHeaders = event.headers || {};
-      const shopUrl = requestHeaders['x-shopify-shop-url'] || requestHeaders['X-Shopify-Shop-Url'];
-      const accessToken = requestHeaders['x-shopify-access-token'] || requestHeaders['X-Shopify-Access-Token'];
-      
-      if (!shopUrl || !accessToken) {
-        return {
-          statusCode: 400,
-          headers,
-          body: JSON.stringify({
-            success: false,
-            message: 'Shopify bilgileri eksik'
-          })
-        };
-      }
+      console.log('Sync başlatılıyor:', options);
       
       try {
-        // XML'den ürünleri al
-        const xmlResponse = await axios.get('https://stildiva.sentos.com.tr/xml-sentos-out/1', { timeout: 15000 });
-        const parsed = await xml2js.parseStringPromise(xmlResponse.data, { explicitArray: false, trim: true });
-        const products = Array.isArray(parsed.Urunler.Urun) ? parsed.Urunler.Urun : [parsed.Urunler.Urun];
+        // XML'den ürünleri al - timeout'u artır
+        console.log('XML\'den ürünler alınıyor:', XML_FEED_URL?.substring(0, 100) + '...');
         
-        console.log(`XML'den ${products.length} ürün bulundu`);
+        const xmlResponse = await axios.get(XML_FEED_URL, { 
+          timeout: 10000, // 10 saniye (Netlify timeout'u önlemek için)
+          headers: {
+            'User-Agent': 'Shopify-XML-Sync/1.0',
+            'Accept': 'application/xml, text/xml, */*'
+          },
+          maxContentLength: 50 * 1024 * 1024, // 50MB max
+          maxBodyLength: 50 * 1024 * 1024
+        });
         
-        if (products.length === 0) {
+        console.log('XML yanıtı alındı, boyut:', xmlResponse.data.length);
+        
+        // Memory kontrolü - çok büyük XML'leri işleme
+        if (xmlResponse.data.length > 10 * 1024 * 1024) { // 10MB'dan büyükse
           return {
             statusCode: 400,
             headers,
             body: JSON.stringify({
               success: false,
-              message: 'XML\'de ürün bulunamadı'
+              message: 'XML dosyası çok büyük (10MB limit)',
+              debug: {
+                xmlSize: xmlResponse.data.length,
+                limit: '10MB'
+              }
             })
           };
         }
         
-        // TÜM ürünleri işle (sınır yok)
-        const productsToProcess = products;
-        console.log(`${productsToProcess.length} ürün işlenecek`);
+        // XML parsing - simplified parser kullan
+        const xml2js = require('xml2js');
+        const parser = new xml2js.Parser({
+          explicitArray: false,
+          trim: true,
+          mergeAttrs: true,
+          ignoreAttrs: false,
+          parseNumbers: false,
+          parseBooleans: false
+        });
         
-        let createdCount = 0;
-        let updatedCount = 0;
-        let errorCount = 0;
-        const processedProducts = [];
+        console.log('XML parse ediliyor...');
+        const xmlData = await parser.parseStringPromise(xmlResponse.data);
+        console.log('XML parse edildi');
         
-        // Batch işleme (100'lü gruplar halinde - daha hızlı)
-        const batchSize = 100;
-        const totalBatches = Math.ceil(productsToProcess.length / batchSize);
+        // XML yapısını kontrol et ve ürünleri bul - kapsamlı format desteği
+        let products = [];
+        let foundPath = '';
         
-        for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-          const batchStart = batchIndex * batchSize;
-          const batchEnd = Math.min(batchStart + batchSize, productsToProcess.length);
-          const batchProducts = productsToProcess.slice(batchStart, batchEnd);
-          
-          console.log(`Batch ${batchIndex + 1}/${totalBatches}: ${batchProducts.length} ürün işleniyor (Toplam: ${createdCount + updatedCount + errorCount}/${productsToProcess.length})`);
-          
-          for (let i = 0; i < batchProducts.length; i++) {
-            const product = batchProducts[i];
+        console.log('XML root anahtarları:', Object.keys(xmlData));
+        
+        // İlk seviye kontrol
+        if (xmlData.catalog?.product) {
+          products = Array.isArray(xmlData.catalog.product) ? xmlData.catalog.product : [xmlData.catalog.product];
+          foundPath = 'catalog.product';
+        } else if (xmlData.products?.product) {
+          products = Array.isArray(xmlData.products.product) ? xmlData.products.product : [xmlData.products.product];
+          foundPath = 'products.product';
+        } else if (xmlData.rss?.channel?.[0]?.item) {
+          products = xmlData.rss.channel[0].item;
+          foundPath = 'rss.channel[0].item';
+        } else if (xmlData.root?.product) {
+          products = Array.isArray(xmlData.root.product) ? xmlData.root.product : [xmlData.root.product];
+          foundPath = 'root.product';
+        } else if (xmlData.product) {
+          products = Array.isArray(xmlData.product) ? xmlData.product : [xmlData.product];
+          foundPath = 'product';
+        } else if (xmlData.items?.item) {
+          products = Array.isArray(xmlData.items.item) ? xmlData.items.item : [xmlData.items.item];
+          foundPath = 'items.item';
+        } else if (xmlData.channel?.item) {
+          products = Array.isArray(xmlData.channel.item) ? xmlData.channel.item : [xmlData.channel.item];
+          foundPath = 'channel.item';
+        } else if (xmlData.feed?.entry) {
+          products = Array.isArray(xmlData.feed.entry) ? xmlData.feed.entry : [xmlData.feed.entry];
+          foundPath = 'feed.entry';
+        } else if (xmlData.urunler?.urun) {
+          products = Array.isArray(xmlData.urunler.urun) ? xmlData.urunler.urun : [xmlData.urunler.urun];
+          foundPath = 'urunler.urun';
+        } else if (xmlData.urun) {
+          products = Array.isArray(xmlData.urun) ? xmlData.urun : [xmlData.urun];
+          foundPath = 'urun';
+        } else {
+          // Daha derin arama - recursive search
+          const findProductArrays = (obj, path = '', maxDepth = 3) => {
+            if (maxDepth <= 0) return [];
+            let found = [];
             
-            try {
-              // Fiyatı düzelt (Türkçe format: "0,00" -> "0.00")
-              let price = '10.00'; // default
-              if (product.satis_fiyati) {
-                const cleanPrice = String(product.satis_fiyati).replace(',', '.');
-                const numPrice = parseFloat(cleanPrice);
-                if (numPrice > 0) {
-                  price = numPrice.toFixed(2);
-                }
-              }
-              
-              // Stok kontrolü
-              const stock = parseInt(product.stok) || 0;
-              
-              // Ürün başlığını temizle
-              const title = product.urunismi ? String(product.urunismi).trim() : `Ürün ${batchStart + i + 1}`;
-              
-              // Kategori bilgisi
-              const productType = product.kategori_ismi ? String(product.kategori_ismi).split(' > ').pop() : 'XML Import';
-              
-              // Açıklama oluştur
-              let description = '';
-              if (product.aciklama && product.aciklama.trim()) {
-                description = String(product.aciklama).trim();
-              } else if (product.alt_baslik && product.alt_baslik.trim()) {
-                description = String(product.alt_baslik).trim();
-              } else {
-                // Ürün bilgilerinden açıklama oluştur
-                const details = [];
-                if (product.kategori_ismi) details.push(`Kategori: ${product.kategori_ismi}`);
-                if (product.stok_kodu) details.push(`Ürün Kodu: ${product.stok_kodu}`);
-                if (product.marka && product.marka.trim()) details.push(`Marka: ${product.marka}`);
-                description = details.join('\n') || 'Kaliteli ürün';
-              }
-              
-              // Shopify ürün objesi (daha detaylı)
-              const shopifyProduct = {
-                title: title,
-                body_html: `<p>${description.replace(/\n/g, '<br>')}</p>`,
-                product_type: productType,
-                vendor: product.marka && product.marka.trim() ? String(product.marka).trim() : 'Sentos',
-                status: 'draft',
-                tags: [
-                  'XML Import',
-                  product.kategori_ismi ? product.kategori_ismi.split(' > ').slice(-2).join(', ') : '',
-                  product.stok_kodu ? `SKU-${product.stok_kodu}` : ''
-                ].filter(Boolean).join(', '),
-                variants: [{
-                  price: price,
-                  inventory_quantity: stock,
-                  weight: product.agirlik ? parseFloat(String(product.agirlik).replace(',', '.')) || 0 : 0,
-                  requires_shipping: true,
-                  sku: product.stok_kodu || `XML-${product.id}`,
-                  barcode: product.barkod || '',
-                  inventory_management: 'shopify',
-                  inventory_policy: 'deny'
-                }],
-                images: []
-              };
-              
-              // Resim URL'leri ekle (varsa)
-              if (product.resim_url_1 && product.resim_url_1.trim()) {
-                shopifyProduct.images.push({ src: product.resim_url_1.trim() });
-              }
-              if (product.resim_url_2 && product.resim_url_2.trim()) {
-                shopifyProduct.images.push({ src: product.resim_url_2.trim() });
-              }
-              if (product.resim_url_3 && product.resim_url_3.trim()) {
-                shopifyProduct.images.push({ src: product.resim_url_3.trim() });
-              }
-              
-              // Shopify'da aynı SKU ile ürün var mı kontrol et
-              let existingProduct = null;
-              try {
-                const searchResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/products.json?fields=id,title,variants&limit=1`, {
-                  headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
-                  timeout: 5000,
-                  params: {
-                    'variants.sku': product.stok_kodu || `XML-${product.id}`
-                  }
-                });
+            if (typeof obj === 'object' && obj !== null) {
+              for (const [key, value] of Object.entries(obj)) {
+                const currentPath = path ? `${path}.${key}` : key;
                 
-                if (searchResponse.data.products && searchResponse.data.products.length > 0) {
-                  existingProduct = searchResponse.data.products[0];
-                }
-              } catch (searchError) {
-                // SKU ile bulunamadı, title ile dene
-                try {
-                  const titleSearchResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/products.json?title=${encodeURIComponent(title)}&fields=id,title,variants&limit=1`, {
-                    headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
-                    timeout: 5000
-                  });
-                  
-                  if (titleSearchResponse.data.products && titleSearchResponse.data.products.length > 0) {
-                    existingProduct = titleSearchResponse.data.products[0];
+                // Array kontrolü
+                if (Array.isArray(value) && value.length > 0) {
+                  // Array elemanları object mi kontrol et
+                  if (typeof value[0] === 'object' && value[0] !== null) {
+                    found.push({ path: currentPath, data: value, count: value.length });
                   }
-                } catch (titleSearchError) {
-                  console.log(`Ürün arama hatası: ${title}`, titleSearchError.message);
+                } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                  // Object ise içine bak
+                  found = found.concat(findProductArrays(value, currentPath, maxDepth - 1));
                 }
               }
-              
-              if (existingProduct) {
-                // GÜNCELLEME: Mevcut ürünü güncelle
-                try {
-                  const updateData = {
-                    id: existingProduct.id,
-                    body_html: shopifyProduct.body_html,
-                    product_type: shopifyProduct.product_type,
-                    vendor: shopifyProduct.vendor,
-                    tags: shopifyProduct.tags,
-                    variants: [{
-                      id: existingProduct.variants[0].id,
-                      price: price,
-                      inventory_quantity: stock,
-                      sku: product.stok_kodu || existingProduct.variants[0].sku,
-                      barcode: product.barkod || existingProduct.variants[0].barcode,
-                      weight: shopifyProduct.variants[0].weight
-                    }]
-                  };
-                  
-                  await axios.put(`https://${shopUrl}/admin/api/2024-07/products/${existingProduct.id}.json`, {
-                    product: updateData
-                  }, {
-                    headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
-                    timeout: 10000
-                  });
-                  
-                  updatedCount++;
-                  processedProducts.push({
-                    title: title,
-                    action: 'updated',
-                    productId: existingProduct.id,
-                    price: price,
-                    stock: stock,
-                    sku: product.stok_kodu
-                  });
-                  
-                  console.log(`Ürün güncellendi: ${title}`);
-                  
-                } catch (updateError) {
-                  console.error(`Güncelleme hatası: ${title}`, updateError.message);
-                  errorCount++;
-                }
-                
-              } else {
-                // OLUŞTURMA: Yeni ürün oluştur
-                try {
-                  const createResponse = await axios.post(`https://${shopUrl}/admin/api/2024-07/products.json`, {
-                    product: shopifyProduct
-                  }, {
-                    headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
-                    timeout: 10000
-                  });
-                  
-                  createdCount++;
-                  processedProducts.push({
-                    title: title,
-                    action: 'created',
-                    productId: createResponse.data.product.id,
-                    price: price,
-                    stock: stock,
-                    sku: product.stok_kodu
-                  });
-                  
-                  console.log(`Yeni ürün oluşturuldu: ${title}`);
-                  
-                } catch (createError) {
-                  console.error(`Oluşturma hatası: ${title}`, createError.message);
-                  errorCount++;
-                }
-              }
-              
-              // Rate limiting (Shopify API limits)
-              if ((batchStart + i + 1) % 20 === 0) {
-                await new Promise(resolve => setTimeout(resolve, 1000)); // Her 20 üründe 1 saniye bekle
-              } else {
-                await new Promise(resolve => setTimeout(resolve, 30)); // Normal bekleme
-              }
-              
-            } catch (productError) {
-              console.error(`Ürün işleme hatası: ${product.urunismi}`, productError.message);
-              errorCount++;
             }
-          }
+            return found;
+          };
           
-          // Batch arası bekleme
-          if (batchIndex < totalBatches - 1) {
-            console.log(`Batch ${batchIndex + 1} tamamlandı, 1 saniye bekleniyor...`);
-            await new Promise(resolve => setTimeout(resolve, 1000));
+          const foundArrays = findProductArrays(xmlData);
+          console.log('Bulunan array alanları:', foundArrays.map(a => `${a.path} (${a.count} items)`));
+          
+          if (foundArrays.length > 0) {
+            // En çok eleman içeren array'i seç
+            const bestMatch = foundArrays.sort((a, b) => b.count - a.count)[0];
+            products = bestMatch.data;
+            foundPath = bestMatch.path;
+            console.log(`En uygun array seçildi: ${foundPath} (${bestMatch.count} items)`);
           }
         }
         
-        console.log(`Toplam işlem tamamlandı: ${createdCount + updatedCount} başarılı, ${errorCount} hatalı`);
+        console.log(`Ürünler bulundu: ${foundPath}, sayı: ${products.length}`);
         
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({
-            success: true,
-            message: `${createdCount + updatedCount} ürün başarıyla işlendi (${products.length} üründen)`,
-            xmlProducts: products.length,
-            processedCount: createdCount + updatedCount,
-            createdCount,
-            updatedCount,
-            errorCount,
-            batchCount: totalBatches,
-            processedProducts: processedProducts.slice(0, 5), // İlk 5 tanesi
-            sampleProduct: processedProducts.length > 0 ? {
-              title: processedProducts[0].title,
-              sku: processedProducts[0].sku,
-              price: processedProducts[0].price,
-              action: processedProducts[0].action
-            } : null
-          })
+        // Ürün bulunamadıysa detaylı debug bilgisi
+        if (products.length === 0) {
+          // XML'in ilk birkaç karakterini göster
+          const xmlPreview = xmlResponse.data.substring(0, 500);
+          
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({
+              success: false,
+              message: 'XML\'de ürün verisi bulunamadı',
+              debug: {
+                rootKeys: Object.keys(xmlData),
+                dataLength: xmlResponse.data.length,
+                xmlPreview: xmlPreview,
+                checkedPaths: [
+                  'catalog.product', 'products.product', 'rss.channel[0].item', 
+                  'root.product', 'product', 'items.item', 'channel.item', 
+                  'feed.entry', 'urunler.urun', 'urun'
+                ],
+                suggestion: 'XML yapısını console\'da kontrol edin'
+              }
+            })
+          };
+        }
+        
+        console.log('Bulunan ürün sayısı:', products.length);
+        
+        // GERÇEK SHOPIFY SENKRONIZASYONU
+        
+        // Shopify URL formatını düzelt
+        let shopUrl = SHOPIFY_STORE_URL;
+        if (!shopUrl.includes('.myshopify.com')) {
+          shopUrl = shopUrl.replace('https://', '').replace('http://', '');
+          shopUrl = `https://${shopUrl}.myshopify.com`;
+        }
+        if (!shopUrl.startsWith('https://')) {
+          shopUrl = `https://${shopUrl}`;
+        }
+
+        console.log('Shopify store URL:', shopUrl);
+        console.log('Sync options:', options);
+
+        // Test için ilk ürünü Shopify'a gönder
+        const testProduct = products[0];
+        console.log('Test ürünü:', Object.keys(testProduct));
+        
+        // Basit Shopify ürün formatı
+        const title = testProduct.name || testProduct.title || testProduct.ad || testProduct.UrunAdi || 'Test Ürün';
+        const price = testProduct.price || testProduct.fiyat || testProduct.SatisFiyati || '10.00';
+        const sku = testProduct.sku || testProduct.kod || testProduct.UrunKodu || `test-${Date.now()}`;
+        
+        const shopifyProduct = {
+          title: title.substring(0, 255),
+          body_html: testProduct.description || testProduct.aciklama || 'Test açıklama',
+          vendor: 'XML Import',
+          product_type: 'Genel',
+          status: 'active',
+          variants: [{
+            title: 'Default',
+            price: String(price).replace(',', '.'),
+            sku: sku,
+            inventory_quantity: parseInt(testProduct.stock || testProduct.stok || '1'),
+            inventory_management: 'shopify'
+          }]
         };
         
-      } catch (error) {
-        return {
-          statusCode: 400,
-          headers,
-          body: JSON.stringify({
-            success: false,
-            message: 'Sync hatası: ' + error.message
-          })
-        };
-      }
-    }
-
-    // Sync V2: Initiate endpoint
-    if (path.includes('/sync/initiate') && method === 'POST') {
-      try {
-        const xmlResponse = await axios.get('https://stildiva.sentos.com.tr/xml-sentos-out/1', { timeout: 20000 });
-        const parsed = await xml2js.parseStringPromise(xmlResponse.data, { explicitArray: false, trim: true });
-        const products = Array.isArray(parsed.Urunler.Urun) ? parsed.Urunler.Urun : [parsed.Urunler.Urun];
+        console.log('Shopify ürün formatı:', shopifyProduct);
         
-        console.log(`Sync V2: Initiate successful, found ${products.length} products.`);
-
-        // Sadece gerekli alanları döndürerek payload'u küçült
-        const productStubs = products.map(p => ({
-          id: p.id,
-          stok_kodu: p.stok_kodu,
-          urunismi: p.urunismi,
-          satis_fiyati: p.satis_fiyati,
-          stok: p.stok,
-          aciklama: p.aciklama,
-          kategori_ismi: p.kategori_ismi,
-          marka: p.marka,
-          resim_url_1: p.resim_url_1
-        }));
-
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({
-            success: true,
-            totalProducts: productStubs.length,
-            products: productStubs 
-          })
-        };
-      } catch (error) {
-        console.error('Sync V2 Initiate Error:', error.message);
+        try {
+          // Shopify'a test ürünü gönder
+          const createUrl = `${shopUrl}/admin/api/2024-07/products.json`;
+          const response = await axios.post(createUrl, {
+            product: shopifyProduct
+          }, {
+            headers: {
+              'X-Shopify-Access-Token': SHOPIFY_ADMIN_API_TOKEN,
+              'Content-Type': 'application/json'
+            },
+            timeout: 15000
+          });
+          
+          console.log('Shopify yanıtı:', response.status);
+          
+          return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({
+              success: true,
+              message: `Test ürünü başarıyla oluşturuldu: ${title}`,
+              processedCount: 1,
+              createdCount: 1,
+              options: options,
+              debug: {
+                xmlSize: xmlResponse.data.length,
+                totalXmlProducts: products.length,
+                foundPath: foundPath,
+                shopifyUrl: shopUrl,
+                testProductKeys: Object.keys(testProduct),
+                shopifyProductId: response.data.product?.id
+              }
+            })
+          };
+          
+        } catch (shopifyError) {
+          console.error('Shopify API hatası:', shopifyError.response?.data || shopifyError.message);
+          
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({
+              success: false,
+              message: 'Shopify API hatası: ' + (shopifyError.response?.data?.errors || shopifyError.message),
+              debug: {
+                shopifyError: shopifyError.response?.data,
+                testProduct: {
+                  title: title,
+                  price: price,
+                  sku: sku
+                }
+              }
+            })
+          };
+        }
+        
+      } catch (syncError) {
+        console.error('Sync error:', {
+          message: syncError.message,
+          code: syncError.code,
+          status: syncError.response?.status
+        });
+        
+        let errorMessage = 'Senkronizasyon hatası: ';
+        if (syncError.code === 'ECONNABORTED' || syncError.message.includes('timeout')) {
+          errorMessage += 'XML bağlantısı zaman aşımına uğradı (10s)';
+        } else if (syncError.code === 'ENOTFOUND') {
+          errorMessage += 'XML URL\'si bulunamadı';
+        } else if (syncError.code === 'ECONNREFUSED') {
+          errorMessage += 'XML sunucusuna bağlanılamadı';
+        } else if (syncError.message.includes('Parse')) {
+          errorMessage += 'XML formatı geçersiz';
+        } else {
+          errorMessage += syncError.message;
+        }
+        
         return {
           statusCode: 500,
           headers,
           body: JSON.stringify({
             success: false,
-            message: 'XML verisi alınamadı: ' + error.message
+            message: errorMessage,
+            debug: {
+              code: syncError.code,
+              status: syncError.response?.status,
+              timeout: '10 saniye'
+            }
           })
         };
       }
     }
 
-    // Sync V2: Batch processing endpoint
-    if (path.includes('/sync/batch') && method === 'POST') {
-      const requestHeaders = event.headers || {};
-      const shopUrl = requestHeaders['x-shopify-shop-url'] || requestHeaders['X-Shopify-Shop-Url'];
-      const accessToken = requestHeaders['x-shopify-access-token'] || requestHeaders['X-Shopify-Access-Token'];
+    return {
+      statusCode: 404,
+      headers,
+      body: JSON.stringify({ error: 'Sync action bulunamadı' })
+    };
+  } catch (error) {
+    console.error('Sync handler error:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ 
+        error: 'Sync handler hatası',
+        message: error.message
+      })
+    };
+  }
+}
+
+async function handleGoogle(action, event, headers) {
+  try {
+    // Environment variables veya header'lardan Google config al
+    const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 
+                             event.headers['x-google-client-id'] || 
+                             event.headers['X-Google-Client-Id'];
+    const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 
+                                 event.headers['x-google-client-secret'] || 
+                                 event.headers['X-Google-Client-Secret'];
+    const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 
+                               event.headers['x-google-redirect-uri'] || 
+                               event.headers['X-Google-Redirect-Uri'] ||
+                               'https://vervegranxml.netlify.app/auth/google/callback';
+
+    console.log('Google config check:', {
+      hasClientId: !!GOOGLE_CLIENT_ID,
+      hasClientSecret: !!GOOGLE_CLIENT_SECRET,
+      redirectUri: GOOGLE_REDIRECT_URI
+    });
+
+    if (action === 'status') {
+      const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN || 
+                                  event.headers['x-google-refresh-token'] || 
+                                  event.headers['X-Google-Refresh-Token'];
       
-      if (!shopUrl || !accessToken) {
-        return { statusCode: 400, headers, body: JSON.stringify({ success: false, message: 'Shopify bilgileri eksik' }) };
-      }
-
-      const { productsToProcess } = JSON.parse(event.body || '{}');
-
-      if (!productsToProcess || !Array.isArray(productsToProcess) || productsToProcess.length === 0) {
-        return { statusCode: 400, headers, body: JSON.stringify({ success: false, message: 'İşlenecek ürün bulunamadı' }) };
-      }
+      console.log('Google status check:', {
+        hasRefreshToken: !!GOOGLE_REFRESH_TOKEN,
+        hasClientId: !!GOOGLE_CLIENT_ID,
+        hasClientSecret: !!GOOGLE_CLIENT_SECRET,
+        refreshTokenSource: process.env.GOOGLE_REFRESH_TOKEN ? 'env' : 'header'
+      });
       
-      let createdCount = 0;
-      let updatedCount = 0;
-      let errorCount = 0;
-
-      for (const product of productsToProcess) {
-        try {
-          let price = '10.00';
-          if (product.satis_fiyati) {
-            const cleanPrice = String(product.satis_fiyati).replace(',', '.');
-            const numPrice = parseFloat(cleanPrice);
-            if (numPrice > 0) price = numPrice.toFixed(2);
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          connected: !!GOOGLE_REFRESH_TOKEN,
+          isAuthenticated: !!GOOGLE_REFRESH_TOKEN,
+          hasConfig: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET),
+          debug: {
+            hasRefreshToken: !!GOOGLE_REFRESH_TOKEN,
+            hasClientId: !!GOOGLE_CLIENT_ID,
+            hasClientSecret: !!GOOGLE_CLIENT_SECRET,
+            refreshTokenSource: process.env.GOOGLE_REFRESH_TOKEN ? 'env' : 'header'
           }
-          const stock = parseInt(product.stok) || 0;
-          const title = String(product.urunismi || `Ürün ${product.id}`).trim();
+        })
+      };
+    }
 
-          const shopifyProduct = {
-            title: title,
-            body_html: product.aciklama || 'XML\'den aktarılan ürün',
-            product_type: product.kategori_ismi ? String(product.kategori_ismi).split(' > ').pop() : 'XML Import',
-            vendor: product.marka || 'Sentos',
-            status: 'draft',
-            variants: [{
-              price: price,
-              inventory_quantity: stock,
-              sku: product.stok_kodu || `XML-${product.id}`
-            }],
-            images: product.resim_url_1 ? [{ src: product.resim_url_1 }] : []
-          };
-
-          let existingProduct = null;
-          try {
-            const searchResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/products.json?fields=id,variants&limit=1`, {
-              headers: { 'X-Shopify-Access-Token': accessToken },
-              params: { 'variants.sku': shopifyProduct.variants[0].sku }
-            });
-            if (searchResponse.data.products.length > 0) {
-              existingProduct = searchResponse.data.products[0];
-            }
-          } catch (searchError) {
-             console.log(`SKU arama hatası: ${title}`, searchError.message);
-          }
-
-          if (existingProduct) {
-            const updateData = {
-              id: existingProduct.id,
-              body_html: shopifyProduct.body_html,
-              product_type: shopifyProduct.product_type,
-              vendor: shopifyProduct.vendor,
-              variants: [{
-                id: existingProduct.variants[0].id,
-                price: price,
-                inventory_quantity: stock
-              }]
-            };
-            await axios.put(`https://${shopUrl}/admin/api/2024-07/products/${existingProduct.id}.json`, { product: updateData }, {
-              headers: { 'X-Shopify-Access-Token': accessToken }
-            });
-            updatedCount++;
-          } else {
-            await axios.post(`https://${shopUrl}/admin/api/2024-07/products.json`, { product: shopifyProduct }, {
-              headers: { 'X-Shopify-Access-Token': accessToken }
-            });
-            createdCount++;
-          }
-        } catch (productError) {
-          console.error(`Ürün işleme hatası: ${product.urunismi}`, productError.message);
-          errorCount++;
-        }
+    if (action === 'auth-url') {
+      if (!GOOGLE_CLIENT_ID) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            message: 'Google Client ID bulunamadı'
+          })
+        };
       }
+
+      const scopes = [
+        'https://www.googleapis.com/auth/spreadsheets',
+        'https://www.googleapis.com/auth/drive.file'
+      ];
+
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+        `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}&` +
+        `redirect_uri=${encodeURIComponent(GOOGLE_REDIRECT_URI)}&` +
+        `scope=${encodeURIComponent(scopes.join(' '))}&` +
+        `response_type=code&` +
+        `access_type=offline&` +
+        `prompt=consent`;
 
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({
           success: true,
-          created: createdCount,
-          updated: updatedCount,
-          errors: errorCount
+          url: authUrl
         })
       };
     }
 
-    // Test ürününü silme endpoint'i
-    if (path.includes('/sync/clean') && method === 'DELETE') {
-      const requestHeaders = event.headers || {};
-      const shopUrl = requestHeaders['x-shopify-shop-url'] || requestHeaders['X-Shopify-Shop-Url'];
-      const accessToken = requestHeaders['x-shopify-access-token'] || requestHeaders['X-Shopify-Access-Token'];
-      
-      if (!shopUrl || !accessToken) {
+    if (action === 'exchange-code' && event.httpMethod === 'POST') {
+      if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
         return {
           statusCode: 400,
           headers,
           body: JSON.stringify({
             success: false,
-            message: 'Shopify bilgileri eksik'
+            message: 'Google Client ID veya Client Secret bulunamadı'
+          })
+        };
+      }
+
+      const body = JSON.parse(event.body || '{}');
+      const code = body.code;
+
+      if (!code) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            message: 'Authorization code bulunamadı'
           })
         };
       }
 
       try {
-        // Test/XML ürünlerini bul (daha hızlı sorgu)
-        const productsResponse = await axios.get(`https://${shopUrl}/admin/api/2024-07/products.json?vendor=Sentos&limit=50`, {
-          headers: { 'X-Shopify-Access-Token': accessToken, 'Content-Type': 'application/json' },
-          timeout: 8000
+        const axios = require('axios');
+        
+        // Google'dan access token ve refresh token al
+        const tokenResponse = await axios.post('https://oauth2.googleapis.com/token', {
+          client_id: GOOGLE_CLIENT_ID,
+          client_secret: GOOGLE_CLIENT_SECRET,
+          code: code,
+          grant_type: 'authorization_code',
+          redirect_uri: GOOGLE_REDIRECT_URI
         });
 
-        let testProducts = productsResponse.data.products || [];
+        const tokens = tokenResponse.data;
         
-        // Ek filtreleme
-        testProducts = testProducts.filter(p => 
-          p.vendor === 'Sentos' ||
-          p.product_type === 'XML Import' ||
-          p.title.includes('Test') || 
-          p.title.includes('XML') ||
-          p.title.includes('Büyük Beden')
-        );
-
-        if (testProducts.length === 0) {
+        if (tokens.refresh_token) {
           return {
             statusCode: 200,
             headers,
             body: JSON.stringify({
               success: true,
-              message: 'Silinecek test ürünü bulunamadı',
-              deletedCount: 0
+              refreshToken: tokens.refresh_token,
+              accessToken: tokens.access_token
+            })
+          };
+        } else {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({
+              success: false,
+              message: 'Refresh token alınamadı. Lütfen Google hesabınızdan uygulamaya verilen izinleri kaldırıp tekrar deneyin.'
             })
           };
         }
-
-        // Maksimum 50 ürün sil (daha hızlı temizlik)
-        const productsToDelete = testProducts.slice(0, 50);
-        let deletedCount = 0;
-        const deletedProducts = [];
-        
-        // Paralel silme ile hızlandır
-        const deletePromises = productsToDelete.map(async (product) => {
-          try {
-            await axios.delete(`https://${shopUrl}/admin/api/2024-07/products/${product.id}.json`, {
-              headers: { 'X-Shopify-Access-Token': accessToken },
-              timeout: 3000
-            });
-            deletedCount++;
-            deletedProducts.push({ id: product.id, title: product.title });
-            console.log(`Test ürünü silindi: ${product.title} (ID: ${product.id})`);
-            return true;
-          } catch (deleteError) {
-            console.error(`Ürün silinemedi: ${product.title}`, deleteError.message);
-            return false;
-          }
-        });
-
-        // Tüm silme işlemlerini bekle (max 5 saniye)
-        await Promise.allSettled(deletePromises);
-
-        const remainingCount = testProducts.length - productsToDelete.length;
-
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({
-            success: true,
-            message: `${deletedCount} test ürünü silindi${remainingCount > 0 ? ` (${remainingCount} ürün kaldı, tekrar deneyin)` : ''}`,
-            deletedCount,
-            remainingCount,
-            deletedProducts: deletedProducts.slice(0, 5) // İlk 5 tanesini göster
-          })
-        };
-
-      } catch (error) {
-        console.error('Test ürün silme hatası:', error.message);
+      } catch (tokenError) {
+        console.error('Google token exchange error:', tokenError);
         return {
           statusCode: 500,
           headers,
           body: JSON.stringify({
             success: false,
-            message: `Test ürün silme hatası: ${error.message}`
+            message: 'Token değişimi hatası: ' + tokenError.message
           })
         };
       }
     }
 
-    // Default response
+    if (action === 'create-sheet') {
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          message: 'Google Sheets entegrasyonu henüz tamamlanmadı'
+        })
+      };
+    }
+
     return {
       statusCode: 404,
       headers,
-      body: JSON.stringify({
-        error: 'Endpoint bulunamadı',
-        path: path,
-        method: method
-      })
+      body: JSON.stringify({ error: 'Google action bulunamadı' })
     };
-
   } catch (error) {
-    console.error('API Error:', error);
+    console.error('Google handler error:', error);
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({
-        error: 'Sunucu hatası',
+      body: JSON.stringify({ 
+        error: 'Google handler hatası',
         message: error.message
       })
     };
   }
-};
+}

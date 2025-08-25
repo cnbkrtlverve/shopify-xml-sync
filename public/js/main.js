@@ -348,7 +348,7 @@ async function updateDashboard() {
     if (config.xmlUrl) apiHeaders['X-XML-Feed-Url'] = config.xmlUrl;
 
     console.log('Dashboard API çağrısı yapılıyor:', {
-        url: '/api/shopify/info',
+    url: '/.netlify/functions/api/shopify/info',
         headers: {
             hasShopifyUrl: !!apiHeaders['X-Shopify-Shop-Url'],
             hasShopifyToken: !!apiHeaders['X-Shopify-Access-Token'],
@@ -435,7 +435,7 @@ async function updateDashboard() {
     const xmlTimeoutId = setTimeout(() => xmlController.abort(), 30000); // 30 saniye
 
     console.log('XML stats kontrol başlatılıyor:', {
-        url: '/api/xml/stats',
+    url: '/.netlify/functions/api/xml/stats',
         xmlUrl: config.xmlUrl,
         headers: Object.keys(apiHeaders)
     });
