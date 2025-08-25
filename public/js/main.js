@@ -348,7 +348,7 @@ async function updateDashboard() {
     if (config.xmlUrl) apiHeaders['X-XML-Feed-Url'] = config.xmlUrl;
 
     console.log('Dashboard API çağrısı yapılıyor:', {
-    url: '/.netlify/functions/api/shopify/info',
+        url: '/api/shopify/info',
         headers: {
             hasShopifyUrl: !!apiHeaders['X-Shopify-Shop-Url'],
             hasShopifyToken: !!apiHeaders['X-Shopify-Access-Token'],
@@ -435,7 +435,7 @@ async function updateDashboard() {
     const xmlTimeoutId = setTimeout(() => xmlController.abort(), 30000); // 30 saniye
 
     console.log('XML stats kontrol başlatılıyor:', {
-    url: '/.netlify/functions/api/xml/stats',
+        url: '/api/xml/stats',
         xmlUrl: config.xmlUrl,
         headers: Object.keys(apiHeaders)
     });
@@ -575,171 +575,112 @@ function addLog(message, type = 'info') {
     logContainer.scrollTop = logContainer.scrollHeight; // Auto-scroll
 }
 
-// --- YENİ SYNC V2 FONKSİYONLARI ---
+// --- YENİ FONKSİYONLAR ---
 
-let isSyncing = false;
-let stopSync = false;
-
-function handleStopSync() {
-    if (isSyncing) {
-        stopSync = true;
-        addLog('🛑 Durdurma isteği alındı. Mevcut batch tamamlandıktan sonra durdurulacak.', 'warn');
-        document.getElementById('stop-sync-btn').disabled = true;
-        document.getElementById('stop-sync-btn').textContent = 'Durduruluyor...';
-    }
-}
-
-async function handleStartSync() {
-    if (isSyncing) {
-        addLog('Zaten bir senkronizasyon çalışıyor.', 'warn');
-        return;
-    }
-
+function handleStartSync() {
     const config = window.configService.getConfig();
-    if (!config.shopifyUrl || !config.shopifyAdminToken) {
-        alert('Lütfen önce Shopify konfigürasyonunu tamamlayın.');
+    
+    if (!config.shopifyUrl || !config.shopifyAdminToken || !config.xmlUrl) {
+        alert('Lütfen önce konfigürasyonu tamamlayın.');
         return;
     }
 
-    // UI'ı başlat
-    isSyncing = true;
-    stopSync = false;
-    document.getElementById('start-sync-btn').disabled = true;
-    document.getElementById('clean-test-btn').disabled = true;
-    document.getElementById('stop-sync-btn').style.display = 'inline-block';
-    document.getElementById('stop-sync-btn').disabled = false;
-    document.getElementById('stop-sync-btn').textContent = 'Durdur';
-    document.getElementById('sync-progress-container').style.display = 'block';
-    updateProgressBar(0, 'Başlatılıyor...');
-    
-    const logContainer = document.getElementById('sync-log');
-    logContainer.innerHTML = ''; // Önceki logları temizle
-    addLog('🚀 Senkronizasyon V2 başlatılıyor...', 'info');
-
-    const apiHeaders = {
-        'Content-Type': 'application/json',
-        'X-Shopify-Shop-Url': config.shopifyUrl,
-        'X-Shopify-Access-Token': config.shopifyAdminToken,
+    const syncOptions = {
+        full: document.getElementById('sync-full').checked,
+        price: document.getElementById('sync-price').checked,
+        inventory: document.getElementById('sync-inventory').checked,
+        details: document.getElementById('sync-details').checked,
+        images: document.getElementById('sync-images').checked,
     };
 
-    try {
-        // 1. Initiate Sync: Get all products from XML
-        addLog('🔄 XML verisi alınıyor ve ürün listesi hazırlanıyor...', 'info');
-        const initiateResponse = await fetch('/.netlify/functions/api/sync/initiate', {
-            method: 'POST',
-            headers: apiHeaders
-        });
+    const logContainer = document.getElementById('sync-log');
+    logContainer.innerHTML = ''; // Önceki logları temizle
+    addLog('Senkronizasyon başlatılıyor...', 'info');
 
-        if (!initiateResponse.ok) {
-            throw new Error(`Başlatma hatası: ${initiateResponse.statusText}`);
+    // Header'ları hazırla
+    const apiHeaders = {
+        'Content-Type': 'application/json'
+    };
+    
+    if (config.shopifyUrl) apiHeaders['X-Shopify-Shop-Url'] = config.shopifyUrl;
+    if (config.shopifyAdminToken) apiHeaders['X-Shopify-Access-Token'] = config.shopifyAdminToken;
+    if (config.xmlUrl) apiHeaders['X-XML-Feed-Url'] = config.xmlUrl;
+
+    // POST request ile sync başlat - AbortController ile timeout
+    const syncController = new AbortController();
+    const syncTimeoutId = setTimeout(() => {
+        syncController.abort();
+<<<<<<< HEAD
+        addLog('Senkronizasyon zaman aşımına uğradı (15 dakika)', 'error');
+        addLog('💡 1623 ürün işleniyor, çok uzun sürüyor', 'info');
+    }, 900000); // 15 dakika timeout
+=======
+        addLog('Senkronizasyon zaman aşımına uğradı (30 saniye)', 'error');
+    }, 30000); // 30 saniye timeout
+>>>>>>> parent of 43dca03 (Enhanced XML sync with detailed product information and batch processing)
+
+    fetch('/.netlify/functions/api/sync/start', {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({ options: syncOptions }),
+        signal: syncController.signal
+    })
+    .then(response => {
+        clearTimeout(syncTimeoutId);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-
-        const initiateData = await initiateResponse.json();
-        if (!initiateData.success) {
-            throw new Error(initiateData.message || 'Ürün listesi alınamadı.');
-        }
-
-        const allProducts = initiateData.products;
-        const totalProducts = initiateData.totalProducts;
-        addLog(`✅ ${totalProducts} ürün bulundu. Batch işlemleri başlıyor.`, 'success');
-
-        // 2. Process in Batches
-        const BATCH_SIZE = 10; // Netlify timeout'larını önlemek için küçük tutalım
-        let processedCount = 0;
-        let totalCreated = 0;
-        let totalUpdated = 0;
-        let totalErrors = 0;
-
-        for (let i = 0; i < totalProducts; i += BATCH_SIZE) {
-            if (stopSync) {
-                addLog('� Senkronizasyon kullanıcı tarafından durduruldu.', 'warn');
-                break;
-            }
-
-            const batch = allProducts.slice(i, i + BATCH_SIZE);
-            const batchNumber = (i / BATCH_SIZE) + 1;
-            addLog(`📦 Batch #${batchNumber} işleniyor (${batch.length} ürün)...`, 'info');
-
-            try {
-                const batchResponse = await fetch('/.netlify/functions/api/sync/batch', {
-                    method: 'POST',
-                    headers: apiHeaders,
-                    body: JSON.stringify({ productsToProcess: batch })
-                });
-
-                if (!batchResponse.ok) {
-                    throw new Error(`Batch #${batchNumber} hatası: ${batchResponse.statusText}`);
-                }
-
-                const batchResult = await batchResponse.json();
-                if (batchResult.success) {
-                    totalCreated += batchResult.created;
-                    totalUpdated += batchResult.updated;
-                    totalErrors += batchResult.errors;
-                    addLog(`👍 Batch #${batchNumber} tamamlandı: ${batchResult.created} oluşturuldu, ${batchResult.updated} güncellendi, ${batchResult.errors} hata.`, 'success');
-                } else {
-                    totalErrors += batch.length;
-                    addLog(`👎 Batch #${batchNumber} işlenemedi: ${batchResult.message}`, 'error');
-                }
-
-            } catch (batchError) {
-                totalErrors += batch.length;
-                addLog(`💥 Batch #${batchNumber} sırasında kritik hata: ${batchError.message}`, 'error');
+        return response.json();
+    })
+    .then(result => {
+        if (result.success) {
+            addLog('✅ Senkronizasyon başarılı!', 'success');
+            addLog(`📊 XML'de toplam ${result.xmlProducts} ürün bulundu`, 'info');
+            addLog(`🔄 İşlenen ürün: ${result.processedCount}`, 'success');
+            addLog(`➕ Oluşturulan: ${result.createdCount}`, 'success');
+            addLog(`📝 Güncellenen: ${result.updatedCount}`, 'warning');
+            
+            if (result.errorCount > 0) {
+                addLog(`❌ Hatalı: ${result.errorCount}`, 'error');
             }
             
-            processedCount += batch.length;
-            const progress = Math.round((processedCount / totalProducts) * 100);
-            updateProgressBar(progress, `${processedCount} / ${totalProducts}`);
+            // İşlenen ürünlerin detayları
+            if (result.processedProducts && result.processedProducts.length > 0) {
+                addLog('📋 İşlenen ürünler:', 'info');
+                result.processedProducts.forEach(product => {
+                    const actionText = product.action === 'created' ? 'oluşturuldu' : 'güncellendi';
+                    const actionType = product.action === 'created' ? 'success' : 'warning';
+                    addLog(`  • ${product.title} (${actionText}) - ₺${product.price}`, actionType);
+                });
+            }
+            
+            updateDashboard(); // Dashboard'u güncelle
+        } else {
+            addLog(`❌ Senkronizasyon hatası: ${result.message}`, 'error');
+            if (result.debug) {
+                console.log('Sync debug bilgisi:', result.debug);
+                if (result.debug.shopifyError) {
+                    addLog('Shopify API hatası console\'da detaylandırıldı', 'error');
+                    console.error('Shopify Error:', result.debug.shopifyError);
+                }
+                if (result.debug.testProduct) {
+                    addLog(`Test ürün: ${result.debug.testProduct.title}`, 'info');
+                    addLog(`SKU: ${result.debug.testProduct.sku}`, 'info');
+                    addLog(`Fiyat: ${result.debug.testProduct.price}`, 'info');
+                }
+            }
         }
-
-        // 3. Finalize Sync
-        addLog('🏁 Senkronizasyon tamamlandı!', 'info');
-        addLog('--- ÖZET ---', 'info');
-        addLog(`➕ Toplam Oluşturulan: ${totalCreated}`, 'success');
-        addLog(`📝 Toplam Güncellenen: ${totalUpdated}`, 'warn');
-        addLog(`❌ Toplam Hata: ${totalErrors}`, 'error');
-        updateDashboard();
-
-    } catch (error) {
-        addLog(`❌ Senkronizasyon sırasında kritik bir hata oluştu: ${error.message}`, 'error');
-        console.error('Sync V2 Error:', error);
-    } finally {
-        // UI'ı sıfırla
-        isSyncing = false;
-        stopSync = false;
-        document.getElementById('start-sync-btn').disabled = false;
-        document.getElementById('clean-test-btn').disabled = false;
-        document.getElementById('stop-sync-btn').style.display = 'none';
-        // Progress bar'ı 5 saniye sonra gizle
-        setTimeout(() => {
-            document.getElementById('sync-progress-container').style.display = 'none';
-        }, 5000);
-    }
+    })
+    .catch(error => {
+        clearTimeout(syncTimeoutId);
+        if (error.name === 'AbortError') {
+            addLog('Senkronizasyon zaman aşımına uğradı', 'error');
+        } else {
+            addLog(`Bağlantı hatası: ${error.message}`, 'error');
+        }
+        console.error('Sync error:', error);
+    });
 }
-
-function updateProgressBar(percentage, text) {
-    const progressBar = document.getElementById('sync-progress-bar');
-    const progressText = document.getElementById('sync-progress-text');
-    
-    percentage = Math.max(0, Math.min(100, percentage)); // 0-100 arasında kalmasını sağla
-    
-    progressBar.style.width = `${percentage}%`;
-    progressText.textContent = text || `${percentage}%`;
-}
-
-// --- ESKİ FONKSİYONLARI GÜNCELLE ---
-
-function setupEventListeners() {
-    // ... (diğer event listener'lar)
-    
-    // Sync Page
-    document.getElementById('start-sync-btn').addEventListener('click', handleStartSync);
-    document.getElementById('stop-sync-btn').addEventListener('click', handleStopSync); // Yeni
-    document.getElementById('clean-test-btn').addEventListener('click', handleCleanTestProducts);
-
-    // ... (diğer event listener'lar)
-}
-
 
 function handleGoogleAuth() {
     const config = window.configService.getConfig();
